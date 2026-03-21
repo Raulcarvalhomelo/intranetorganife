@@ -319,6 +319,31 @@ Before creating tests, inform:
 5. what will be tested in real form
 6. how the test protects current behavior
 
+### 10.16 TEST IMMUTABILITY RULE
+
+- After a test is created, it must be treated as a validation contract.
+- Tests must not be modified to make failing code pass.
+- If a test fails, the implementation must be fixed, not the test.
+
+- A test can only be changed if:
+  - the business rule is explicitly changed
+  - the expected behavior was incorrectly defined
+  - and this change must be explained before implementation
+
+- It is forbidden to:
+  - weaken assertions
+  - remove validations
+  - reduce test coverage to make code pass
+  - change expected results without justification
+
+- If a test fails, the AI must:
+  1. analyze the failure
+  2. explain the root cause
+  3. determine whether the issue is in the code or the test
+  4. wait for confirmation before modifying the test
+
+Default rule:
+Failing tests indicate a problem in the implementation, not in the test.
 ## MANDATORY
 
 Test and mock rules must respect ALL previous rules in this document.
