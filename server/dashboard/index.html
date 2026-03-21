@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard Extensão</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header>
+    <div class="header-top">
+      <h1>Dashboard da Extensão</h1>
+      <button id="logoutBtn">Sair</button>
+    </div>
+    <p id="status">Conectando...</p>
+    <div class="realtime">
+      <span id="sseBadge" class="badge offline">SSE offline</span>
+      <span id="stats"></span>
+    </div>
+  </header>
+
+  <nav>
+    <button data-tab="settings" class="active">Controle</button>
+    <button data-tab="requests">Solicitações</button>
+    <button data-tab="logs">Logs</button>
+    <button data-tab="notices">Avisos</button>
+    <button data-tab="config" class="nav-right">Configurações</button>
+  </nav>
+
+  <main>
+    <section id="tab-settings" class="tab active">
+      <h2>Configurações</h2>
+      <div class="grid">
+        <div><label>Sites bloqueados</label><textarea id="blockedSites"></textarea></div>
+        <div><label>Palavras bloqueadas</label><textarea id="blockedKeywords"></textarea></div>
+        <div><label>Links permitidos</label><textarea id="allowedLinks"></textarea></div>
+        <div><label>Domínios permitidos</label><textarea id="allowedDomains"></textarea></div>
+        <div><label>Links temporários</label><textarea id="tempAllowedLinks"></textarea></div>
+        <div>
+          <label>Usuário padrão</label>
+          <input id="browserUser" />
+          <label class="check"><input type="checkbox" id="totalBlockMode" /> Bloqueio total</label>
+        </div>
+      </div>
+      <button id="saveSettings">Salvar</button>
+    </section>
+
+    <section id="tab-config" class="tab">
+      <h2>Configurações</h2>
+      <div class="panel">
+        <h3>Configurações Gerais da Extensão</h3>
+        <label>Nome da Empresa</label>
+        <input id="companyName" />
+        <label>URL do Servidor VPS</label>
+        <input id="serverUrl" />
+        <button id="saveConfig">Salvar configurações gerais</button>
+      </div>
+
+      <div class="panel">
+        <h3>Links Rápidos</h3>
+        <div id="quickLinksConfig"></div>
+        <button id="addQuickLink">Adicionar link</button>
+      </div>
+
+      <div class="panel">
+        <h3>Backup e Restore</h3>
+        <div class="actions-row">
+          <button id="backupSettings">Exportar backup</button>
+          <button id="restoreSettings">Importar backup</button>
+          <input type="file" id="restoreFile" accept=".json" />
+        </div>
+      </div>
+
+      <div class="passwords-box">
+        <h3>Troca de Senhas</h3>
+        <div class="passwords-grid">
+          <div>
+            <label>Senha atual do Dashboard</label>
+            <input id="currentDashboardPassword" type="password" autocomplete="current-password" />
+            <label>Nova senha do Dashboard</label>
+            <input id="newDashboardPassword" type="password" autocomplete="new-password" />
+          </div>
+          <div>
+            <label>Senha atual do Dashboard para reset</label>
+            <input id="currentDashboardPasswordForAdmin" type="password" autocomplete="current-password" />
+            <label>Nova senha do Admin da Extensão</label>
+            <input id="newAdminPassword" type="password" autocomplete="new-password" />
+          </div>
+          <div>
+            <label>Senha atual do Dashboard para reset</label>
+            <input id="currentDashboardPasswordForViewer" type="password" autocomplete="current-password" />
+            <label>Nova senha do usuário visualizacao</label>
+            <input id="newViewerPassword" type="password" autocomplete="new-password" />
+          </div>
+          <div>
+            <label>Senha atual do Dashboard para reset</label>
+            <input id="currentDashboardPasswordForRestricted" type="password" autocomplete="current-password" />
+            <label>Nova senha de acesso restrito da extensão</label>
+            <input id="newRestrictedPassword" type="password" autocomplete="new-password" />
+          </div>
+        </div>
+        <button id="changePasswords">Alterar senhas</button>
+      </div>
+    </section>
+
+    <section id="tab-requests" class="tab">
+      <h2>Solicitações de Liberação</h2>
+      <div class="actions-row requests-filters">
+        <input id="requestsUserFilter" placeholder="Filtrar por usuário" />
+      </div>
+      <table>
+        <thead><tr><th>Data</th><th>Usuário</th><th>Navegador</th><th>Domínio</th><th>Motivo</th><th>Status</th><th>Ação</th></tr></thead>
+        <tbody id="requestsBody"></tbody>
+      </table>
+    </section>
+
+    <section id="tab-logs" class="tab">
+      <h2>Logs</h2>
+      <div class="actions-row logs-filters">
+        <input id="logsUserFilter" placeholder="Usuários (ex: joao,maria)" />
+        <label><input id="logsAllUsers" type="checkbox" /> Todos os usuários</label>
+        <input id="logsDayFilter" type="date" />
+        <label>De <input id="logsStartTime" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" /></label>
+        <label>Até <input id="logsEndTime" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" /></label>
+        <input id="logsSearch" placeholder="Buscar por usuário, navegador, domínio, tipo ou dados" />
+        <input id="logsDomainFilter" placeholder="Filtrar domínio (ex: google.com)" />
+        <select id="logsTypeFilter">
+          <option value="">Todos os tipos</option>
+          <option value="navigation">Navegação</option>
+          <option value="click">Clique</option>
+          <option value="download">Download</option>
+          <option value="form_submit">Formulário</option>
+          <option value="access">Access</option>
+        </select>
+        <button id="refreshLogs">Puxar logs</button>
+      </div>
+      <table>
+        <thead><tr><th>Data</th><th>Usuário</th><th>Navegador</th><th>Domínio</th><th>Tipo/Ação</th><th>Dados</th></tr></thead>
+        <tbody id="logsBody"></tbody>
+      </table>
+    </section>
+
+    <section id="tab-notices" class="tab">
+      <h2>Avisos</h2>
+      <div class="panel">
+        <h3>Mural de Avisos da Empresa</h3>
+        <label>Mensagem do Mural</label>
+        <textarea id="companyNotice" rows="4" placeholder="Digite a mensagem que aparece na intranet"></textarea>
+        <button id="saveNotice">Enviar aviso para intranet</button>
+      </div>
+      <div class="panel tutorial-panel">
+        <h3>Tutorial rápido (imagens e links)</h3>
+        <p>No campo "Mensagem do Mural", você pode usar texto normal, links e imagens.</p>
+        <div class="tutorial-grid">
+          <div class="tutorial-block">
+            <h4>Link com texto personalizado</h4>
+            <p class="tutorial-code">[Abrir Google](https://www.google.com)</p>
+          </div>
+          <div class="tutorial-block">
+            <h4>Link automático</h4>
+            <p class="tutorial-code">https://www.organife.com.br</p>
+          </div>
+          <div class="tutorial-block">
+            <h4>Imagem no texto</h4>
+            <p class="tutorial-code">![Banner](https://i.postimg.cc/xxxxx/imagem.png)</p>
+          </div>
+          <div class="tutorial-block">
+            <h4>Imagem em linha única</h4>
+            <p class="tutorial-code">img: https://i.postimg.cc/xxxxx/imagem.png</p>
+          </div>
+        </div>
+        <h4>Como gerar URL da imagem no Postimages</h4>
+        <ol class="tutorial-steps">
+          <li>Acesse <a href="https://postimages.org/" target="_blank" rel="noopener noreferrer">postimages.org</a>.</li>
+          <li>Clique em upload, cole a imagem ou arraste o arquivo.</li>
+          <li>Após enviar, copie o link direto da imagem (de preferência PNG/JPG).</li>
+          <li>Cole esse link no formato <span class="tutorial-code-inline">![Texto](URL)</span> ou <span class="tutorial-code-inline">img: URL</span>.</li>
+        </ol>
+      </div>
+    </section>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>

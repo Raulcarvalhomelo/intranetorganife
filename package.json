@@ -1,0 +1,11 @@
+{
+  "name": "OrganifeExtension",
+  "private": true,
+  "version": "3.2.4",
+  "scripts": {
+    "lint": "node --check background.js && node --check blocked.js && node --check popup.js && node --check intranet.js && node --check content.js && node --check options.js && node --check identity.js && node --check sse.js && node --check server/backend/app.js && node --check server/dashboard/app.js",
+    "start:server": "node server/backend/app.js",
+    "test": "node --test --test-concurrency=1 \"server/test/.test/**/*.test.js\"",
+    "start:extension:test": "node -e \"const fs=require('fs');const p='server/database/runtime-state.json';const s=JSON.parse(fs.readFileSync(p,'utf8'));s.settings=s.settings||{};s.settings.serverUrl='http://localhost:1337';fs.writeFileSync(p,JSON.stringify(s,null,2));console.log('serverUrl de teste definido em http://localhost:1337');\" && node server/backend/app.js"
+  }
+}

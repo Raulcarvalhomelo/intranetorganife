@@ -1,0 +1,127 @@
+{
+  "auth": {
+    "dashboardPassword": "asdf",
+    "dashboardViewerPassword": "zzzz"
+  },
+  "settings": {
+    "adminPassword": "",
+    "restrictedPassword": "",
+    "tempPassword": "",
+    "companyName": "Ambiente De Teste",
+    "companyNotice": "",
+    "serverUrl": "http://192.168.6.4:1337",
+    "quickLinks": [
+      {
+        "name": "t",
+        "url": "https://original.com.brsa"
+      },
+      {
+        "name": "AS",
+        "url": "https://booking.com"
+      },
+      {
+        "name": "Suporte TI",
+        "url": "https://fitgirl-repacks.site"
+      },
+      {
+        "name": "dsad",
+        "url": "https://worldofwarships.com/sign-up/?t=1&pub_id=6808&xid=69b75b61272c2c0001b65748&xid_param1=gx-br-wargaming-worldofwarships-sd&xid_param_2=&sid=SIDFLHe7gTxKT-Z5W84GQwbuxTjQM3yszCGx6j8fBKatbgTnx2yczffl4NdnuYdumiPELWWTFSJp1GNwGbQRmioIkQEgFBI82owR3r-n4SWqX392HHvLywb50LMyNh-lNCYHnd69oNHRisWEQ&enctid=dh3tajqszdh2&lpsn=WOWS+LP+Portal+URL+for+SEM-brand+sign-up&foris=1&teclient=1772927078809982285&utm_source=wlap&utm_medium=affiliate&utm_campaign=y5txyfd3&utm_content=6808"
+      }
+    ],
+    "blockedKeywords": [],
+    "blockedSites": [],
+    "allowedLinks": [],
+    "allowedDomains": [
+      "*.extensions",
+      "*.web.whatsapp.com",
+      "*.booking.com",
+      "*.fitgirl-repacks.site"
+    ],
+    "tempAllowedLinks": [
+      "*.newtab",
+      "*.startpageshared"
+    ],
+    "totalBlockMode": true,
+    "browserUser": ""
+  },
+  "releaseRequests": [
+    {
+      "id": 1774028406342,
+      "clientRequestId": "1774028406338-bb2301a384f4f8",
+      "domain": "*.booking.com",
+      "reason": "sadasdas",
+      "user": "sadsad",
+      "browser": "Edge",
+      "originalUrl": "https://booking.com/",
+      "timestamp": "2026-03-20T17:40:06.338Z",
+      "status": "aprovado_admin"
+    },
+    {
+      "id": 1774027033765,
+      "clientRequestId": "1774027033760-38d40b0bdc0a18",
+      "domain": "*.web.whatsapp.com",
+      "reason": "dasdasd",
+      "user": "dsadsada",
+      "browser": "Opera",
+      "originalUrl": "https://web.whatsapp.com/",
+      "timestamp": "2026-03-20T17:17:13.760Z",
+      "status": "aprovado_admin"
+    },
+    {
+      "id": 1774026465883,
+      "clientRequestId": "1774026465879-579cd1b85bc448",
+      "domain": "*.fitgirl-repacks.site",
+      "reason": "dsada",
+      "user": "dsadsada",
+      "browser": "Opera",
+      "originalUrl": "https://fitgirl-repacks.site/",
+      "timestamp": "2026-03-20T17:07:45.879Z",
+      "status": "aprovado_admin"
+    },
+    {
+      "id": 1774026390166,
+      "clientRequestId": "1774026390162-6cce231d9f8798",
+      "domain": "*.fitgirl-repacks.site",
+      "reason": "dfsdsdsfdsa",
+      "user": "teas",
+      "browser": "Edge",
+      "originalUrl": "https://fitgirl-repacks.site/",
+      "timestamp": "2026-03-20T17:06:30.162Z",
+      "status": "aprovado_admin"
+    },
+    {
+      "id": 1774025406523,
+      "clientRequestId": "1774025406518-b7f875f69a11b8",
+      "domain": "*.extensions",
+      "reason": "jhg",
+      "user": "sdfs",
+      "browser": "Opera",
+      "originalUrl": "chrome://extensions/?id=akeiloedfjlmiidhmpebjakgbcegjmce",
+      "timestamp": "2026-03-20T16:50:06.518Z",
+      "status": "aprovado_admin"
+    },
+    {
+      "id": 1774022989892,
+      "clientRequestId": "1774022989883-2276117a1e4738",
+      "domain": "*.startpageshared",
+      "reason": "sdffds",
+      "user": "sdfs",
+      "browser": "Opera",
+      "originalUrl": "chrome://startpageshared/",
+      "timestamp": "2026-03-20T16:09:49.884Z",
+      "status": "pendente"
+    },
+    {
+      "id": 1774022869791,
+      "clientRequestId": "1774022869786-132abe4bb6a16",
+      "domain": "*.newtab",
+      "reason": "fdsfds",
+      "user": "sd",
+      "browser": "Edge",
+      "originalUrl": "edge://newtab/",
+      "timestamp": "2026-03-20T16:07:49.786Z",
+      "status": "pendente"
+    }
+  ],
+  "logs": []
+}

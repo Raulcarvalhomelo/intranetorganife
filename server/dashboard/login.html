@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login Dashboard</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: Arial, sans-serif; background: #0f172a; color: #111827; padding: 1rem; }
+    .card { width: min(26.25rem, 100%); background: #fff; border-radius: 0.75rem; padding: 1rem; box-shadow: 0 20px 50px rgba(0,0,0,.35); }
+    h1 { margin: 0 0 1rem; font-size: 1.25rem; color: #111827; }
+    p { margin: 0 0 1rem; color: #4b5563; font-size: 0.875rem; line-height: 1.5; }
+    label { display: block; font-weight: 700; margin: 0.75rem 0 0.375rem; font-size: 0.875rem; }
+    input { width: 100%; box-sizing: border-box; border: 1px solid #d1d5db; border-radius: 0.5rem; padding: 0.625rem; font-size: 0.875rem; }
+    button { width: 100%; margin-top: 1rem; border: 0; border-radius: 0.5rem; padding: 0.6875rem; font-weight: 700; background: #111827; color: #fff; cursor: pointer; }
+    #error { margin-top: 0.625rem; color: #b91c1c; font-size: 0.8125rem; min-height: 1rem; }
+    @media (min-width: 640px) {
+      body { padding: 1.5rem; }
+      .card { padding: 1.5rem; }
+    }
+    @media (min-width: 768px) {
+      .card { width: min(28rem, 100%); }
+    }
+    @media (min-width: 1024px) {
+      h1 { font-size: 1.375rem; }
+    }
+    @media (min-width: 1280px) {
+      .card { width: min(30rem, 100%); }
+    }
+  </style>
+</head>
+<body>
+  <form class="card" id="loginForm">
+    <h1 id="formTitle">Entrar no Dashboard</h1>
+    <p id="formDescription">Use seu usuário e senha para acessar o painel.</p>
+    <label for="username">Usuário</label>
+    <input id="username" name="username" autocomplete="username" required />
+    <label for="password">Senha</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required />
+    <div id="confirmWrap" style="display:none;">
+      <label for="confirmPassword">Confirmar senha</label>
+      <input id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" />
+    </div>
+    <button type="submit" id="submitButton">Entrar</button>
+    <div id="error"></div>
+  </form>
+  <script>
+    const form = document.getElementById('loginForm');
+    const errorEl = document.getElementById('error');
+    const usernameEl = document.getElementById('username');
+    const passwordEl = document.getElementById('password');
+    const confirmWrapEl = document.getElementById('confirmWrap');
+    const confirmPasswordEl = document.getElementById('confirmPassword');
+    const formTitleEl = document.getElementById('formTitle');
+    const formDescriptionEl = document.getElementById('formDescription');
+    const submitButtonEl = document.getElementById('submitButton');
+    let setupMode = false;
+
+    async function loadSetupStatus() {
+      try {
+        const response = await fetch('/dashboard/api/setup-status', { cache: 'no-store' });
+        const data = response.ok ? await response.json() : {};
+        setupMode = Boolean(data && data.requiresSetup);
+        const setupUser = String((data && data.setupUser) || 'admin').trim() || 'admin';
+        if (setupMode) {
+          formTitleEl.textContent = 'Configuração inicial do Dashboard';
+          formDescriptionEl.textContent = 'Defina a senha do administrador para concluir o primeiro acesso.';
+          usernameEl.value = setupUser;
+          usernameEl.readOnly = true;
+          usernameEl.setAttribute('aria-readonly', 'true');
+          passwordEl.autocomplete = 'new-password';
+          confirmWrapEl.style.display = 'block';
+          confirmPasswordEl.required = true;
+          submitButtonEl.textContent = 'Definir senha';
+        } else if (!usernameEl.value) {
+          usernameEl.value = setupUser;
+        }
+      } catch {
+        errorEl.textContent = 'Falha ao validar o estado inicial do servidor';
+      }
+    }
+
+    loadSetupStatus();
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      errorEl.textContent = '';
+      const username = usernameEl.value.trim();
+      const password = passwordEl.value;
+      const confirmPassword = confirmPasswordEl.value;
+      try {
+        const endpoint = setupMode ? '/dashboard/setup' : '/dashboard/login';
+        const payload = setupMode ? { password, confirmPassword } : { username, password };
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          if (setupMode) {
+            const body = await res.json().catch(() => ({}));
+            if (body && body.message === 'confirmacao-invalida') {
+              errorEl.textContent = 'As senhas não conferem';
+              return;
+            }
+            if (body && body.message === 'senha-dashboard-curta') {
+              errorEl.textContent = 'A senha precisa ter no mínimo 4 caracteres';
+              return;
+            }
+            if (body && body.message === 'setup-ja-concluido') {
+              setupMode = false;
+              confirmWrapEl.style.display = 'none';
+              confirmPasswordEl.required = false;
+              usernameEl.readOnly = false;
+              usernameEl.removeAttribute('aria-readonly');
+              formTitleEl.textContent = 'Entrar no Dashboard';
+              formDescriptionEl.textContent = 'Use seu usuário e senha para acessar o painel.';
+              submitButtonEl.textContent = 'Entrar';
+              errorEl.textContent = 'Configuração inicial já concluída. Faça login normalmente.';
+              return;
+            }
+            errorEl.textContent = 'Não foi possível concluir a configuração inicial';
+            return;
+          }
+          errorEl.textContent = 'Usuário ou senha inválidos';
+          return;
+        }
+        window.location.href = '/dashboard/';
+      } catch {
+        errorEl.textContent = 'Falha ao conectar com o servidor';
+      }
+    });
+  </script>
+</body>
+</html>

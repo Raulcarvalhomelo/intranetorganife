@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Activity Tracker Settings</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 1rem;
+      font-family: Arial, sans-serif;
+      background: #f8fafc;
+      color: #111827;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      width: 100%;
+      max-width: 34rem;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.75rem;
+      padding: 1rem;
+    }
+    .warning {
+      color: #d32f2f;
+      font-weight: bold;
+      margin: 1rem 0 0;
+      line-height: 1.5;
+    }
+    h2 {
+      margin: 0 0 0.75rem;
+      font-size: 1.25rem;
+    }
+    p {
+      margin: 0;
+      font-size: 0.9375rem;
+      line-height: 1.5;
+    }
+    @media (min-width: 640px) {
+      body {
+        padding: 1.5rem;
+      }
+
+      .card {
+        padding: 1.5rem;
+      }
+    }
+    @media (min-width: 768px) {
+      .card {
+        max-width: 38rem;
+      }
+    }
+    @media (min-width: 1024px) {
+      h2 {
+        font-size: 1.5rem;
+      }
+    }
+    @media (min-width: 1280px) {
+      .card {
+        max-width: 42rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h2>Activity Tracker & Blocker Settings</h2>
+    <p>This extension is managed by your system administrator.</p>
+    <div class="warning">
+      Warning: This extension cannot be disabled or removed without administrator permission.
+    </div>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>

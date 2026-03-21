@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ajuda - Portal Corporativo</title>
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self'">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: radial-gradient(circle at top, #1e293b 0%, #0f172a 58%, #020617 100%);
+      color: #e2e8f0;
+      padding: 1rem;
+    }
+    .help-shell {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      gap: 1rem;
+    }
+    .sidebar {
+      background: rgba(15, 23, 42, 0.76);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 16px;
+      padding: 1rem;
+      backdrop-filter: blur(12px);
+      display: grid;
+      gap: 1rem;
+      align-content: start;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      min-width: 0;
+    }
+    .brand img {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+    }
+    .brand h1 {
+      font-size: 1.05rem;
+      color: #f8fafc;
+      line-height: 1.2;
+    }
+    .brand p {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+    .menu-title {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      color: #94a3b8;
+      text-transform: uppercase;
+      margin-bottom: 0.4rem;
+    }
+    .menu {
+      display: grid;
+      gap: 0.5rem;
+    }
+    .menu-btn {
+      width: 100%;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      background: rgba(15, 23, 42, 0.56);
+      color: #cbd5e1;
+      border-radius: 10px;
+      padding: 0.6rem 0.7rem;
+      text-align: left;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .menu-btn:hover {
+      border-color: rgba(45, 212, 191, 0.55);
+      color: #f8fafc;
+    }
+    .menu-btn.active {
+      background: rgba(45, 212, 191, 0.2);
+      border-color: rgba(45, 212, 191, 0.55);
+      color: #ccfbf1;
+      font-weight: 600;
+    }
+    .content {
+      background: rgba(15, 23, 42, 0.76);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 16px;
+      padding: 1rem;
+      backdrop-filter: blur(12px);
+      min-width: 0;
+    }
+    .content-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .content-title {
+      font-size: 1.1rem;
+      color: #f8fafc;
+      font-weight: 700;
+    }
+    .theme-toggle {
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(15, 23, 42, 0.5);
+      color: #e2e8f0;
+      border-radius: 999px;
+      min-height: 34px;
+      padding: 0 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .theme-toggle:hover {
+      background: rgba(51, 65, 85, 0.65);
+      border-color: rgba(148, 163, 184, 0.6);
+    }
+    .panel {
+      display: none;
+      gap: 0.75rem;
+    }
+    .panel.active {
+      display: grid;
+    }
+    .panel h2 {
+      font-size: 1rem;
+      color: #f8fafc;
+      margin-bottom: 0.2rem;
+    }
+    .panel p {
+      color: #cbd5e1;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .list {
+      list-style: none;
+      display: grid;
+      gap: 0.5rem;
+    }
+    .list li {
+      font-size: 14px;
+      color: #cbd5e1;
+      line-height: 1.5;
+      background: rgba(30, 41, 59, 0.58);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      border-radius: 10px;
+      padding: 0.7rem 0.8rem;
+    }
+    .list strong { color: #f8fafc; }
+    .highlight { color: #38bdf8; font-weight: 600; }
+    .warning {
+      border-color: rgba(239, 68, 68, 0.35) !important;
+      background: rgba(239, 68, 68, 0.14) !important;
+      color: #fecaca !important;
+    }
+    .preview-card {
+      padding: 0.8rem;
+    }
+    .blocked-preview-wrap {
+      width: 100%;
+      max-width: 640px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      background: #0f172a;
+      margin-top: 0.6rem;
+    }
+    .blocked-preview-frame {
+      width: 1280px;
+      height: 920px;
+      border: 0;
+      transform: scale(0.5);
+      transform-origin: top left;
+      margin-bottom: -460px;
+      pointer-events: none;
+      display: block;
+    }
+    .official-note {
+      border-color: rgba(45, 212, 191, 0.35) !important;
+      background: rgba(13, 148, 136, 0.14) !important;
+      color: #99f6e4 !important;
+    }
+    @media (min-width: 960px) {
+      .help-shell {
+        grid-template-columns: 280px minmax(0, 1fr);
+      }
+      .sidebar {
+        position: sticky;
+        top: 1rem;
+        max-height: calc(100vh - 2rem);
+        overflow: auto;
+      }
+      .content {
+        min-height: calc(100vh - 2rem);
+      }
+    }
+    body[data-theme="light"] {
+      background: radial-gradient(circle at top, #ffffff 0%, #eef2ff 56%, #e2e8f0 100%);
+      color: #1e293b;
+    }
+    body[data-theme="light"] .sidebar,
+    body[data-theme="light"] .content {
+      background: rgba(255, 255, 255, 0.9);
+      border-color: rgba(148, 163, 184, 0.34);
+    }
+    body[data-theme="light"] .brand h1,
+    body[data-theme="light"] .content-title,
+    body[data-theme="light"] .panel h2,
+    body[data-theme="light"] .list strong {
+      color: #0f172a;
+    }
+    body[data-theme="light"] .brand img {
+      background: #2A9D8F;
+      padding: 8px;
+      border-radius: 14px;
+      object-fit: contain;
+      object-position: center;
+      display: block;
+    }
+    body[data-theme="light"] .brand p,
+    body[data-theme="light"] .menu-title,
+    body[data-theme="light"] .panel p,
+    body[data-theme="light"] .list li {
+      color: #334155;
+    }
+    body[data-theme="light"] .menu-btn {
+      border-color: rgba(148, 163, 184, 0.34);
+      background: rgba(255, 255, 255, 0.9);
+      color: #334155;
+    }
+    body[data-theme="light"] .menu-btn.active {
+      background: rgba(45, 212, 191, 0.15);
+      color: #0f766e;
+      border-color: rgba(20, 184, 166, 0.45);
+    }
+    body[data-theme="light"] .theme-toggle {
+      background: rgba(255, 255, 255, 0.95);
+      color: #1e293b;
+      border-color: #cbd5e1;
+    }
+    body[data-theme="light"] .theme-toggle:hover {
+      border-color: #64748b;
+      background: rgba(241, 245, 249, 0.95);
+    }
+    body[data-theme="light"] .list li {
+      background: rgba(255, 255, 255, 0.95);
+      border-color: rgba(148, 163, 184, 0.24);
+    }
+    body[data-theme="light"] .warning {
+      color: #7f1d1d !important;
+      background: rgba(254, 226, 226, 0.95) !important;
+      border-color: rgba(185, 28, 28, 0.28) !important;
+    }
+    body[data-theme="light"] .blocked-preview-wrap {
+      border-color: rgba(148, 163, 184, 0.34);
+      background: #0f172a;
+    }
+    body[data-theme="light"] .official-note {
+      color: #115e59 !important;
+      background: rgba(204, 251, 241, 0.95) !important;
+      border-color: rgba(13, 148, 136, 0.32) !important;
+    }
+  </style>
+</head>
+<body data-theme="dark">
+  <main class="help-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <img src="./icons/icon48.png" alt="Logo">
+        <div>
+          <h1>Ajuda Organife</h1>
+          <p>Navegação rápida por tópicos</p>
+        </div>
+      </div>
+      <div>
+        <p class="menu-title">Itens da Ajuda</p>
+        <nav class="menu" id="helpMenu">
+          <button class="menu-btn active" type="button" data-target="sec-visao">1. Visão Geral</button>
+          <button class="menu-btn" type="button" data-target="sec-status">2. Status de Navegação</button>
+          <button class="menu-btn" type="button" data-target="sec-extensao">3. Extensão e Funcionalidades</button>
+          <button class="menu-btn" type="button" data-target="sec-intranet">4. Portal Intranet</button>
+          <button class="menu-btn" type="button" data-target="sec-bloqueio">5. Página de Bloqueio</button>
+          <button class="menu-btn" type="button" data-target="sec-faq">6. FAQ</button>
+          <button class="menu-btn" type="button" data-target="sec-avisos">7. Avisos</button>
+        </nav>
+      </div>
+    </aside>
+
+    <section class="content">
+      <header class="content-header">
+        <h2 class="content-title" id="contentTitle">1. Visão Geral</h2>
+        <button id="themeToggleHelp" class="theme-toggle" type="button">Light</button>
+      </header>
+
+      <article class="panel active" id="sec-visao" data-title="1. Visão Geral">
+        <p>O Portal Corporativo e a Extensão Organife são ferramentas obrigatórias para acesso aos recursos da empresa, com foco em produtividade, segurança e padronização da navegação.</p>
+        <ul class="list">
+          <li class="warning"><strong>⚠️ OBRIGATÓRIO:</strong><br/>🚫NÃO DESATIVE ESTA EXTENSÃO.<br/>Esta extensão é parte do sistema de segurança e monitoramento da empresa. A desativação ou tentativa de desativação compromete o funcionamento da intranet e dos controles de navegação corporativos.<br/> A desativação é registrada automaticamente pelo sistema e gerado  um relatório com identificação do computador e do usuário, então enviado diretamente à diretoria.<br/> A desativação NÃO AUTORIZADA será tratada como violação das políticas internas de segurança da empresa.</li>
+          <li><strong>⚠️ Alerta do Edge "Esta é a nova aba que você esperava?" ou "Is this the new tab you expected?":</strong><br/>Quando aparecer esse aviso, clique em <span class="highlight">Manter alterações (Keep changes)</span> para manter a nova guia corporativa.</li>
+          <li><strong>⚠️ Alerta do Edge "Desative as extensões no modo de desenvolvedor." ou "Turn off extensions in developer mode":</strong><br/>Quando aparecer esse aviso, clique em <span class="highlight"> Agora não (Not now)</span> ou feche no <span class="highlight">X</span>.<br/> 🚫 NÃO CLIQUE em "Desative as extensões " ou "Turn off extensions".</li>
+          <li><strong>Acesso corporativo centralizado:</strong><br/>Use a extensão para abrir links essenciais, acompanhar solicitações e acessar a intranet de forma rápida.</li>
+          <li><strong>Regras de navegação ativa:</strong><br/>A extensão aplica políticas de acesso por horário e por domínio, protegendo o ambiente corporativo.</li>
+          <li><strong>Dados locais do usuário:</strong><br/>Notas e tarefas pessoais ficam salvas neste computador para uso diário.</li>
+          <li><strong>Quando pedir suporte:</strong><br/>Se a extensão não carregar, se o status ficar sem sincronização por longo período ou se aparecer bloqueio indevido, acione o TI imediatamente.</li>
+        </ul>
+      </article>
+
+      <article class="panel" id="sec-status" data-title="2. Status de Navegação">
+        <!-- <h2>2. Status de Navegação</h2> -->
+        <ul class="list">
+          <li><strong>Horário Livre:</strong> <br/>O Entre <span class="highlight">12:00 e 13:00</span> (Almoço), a navegação é liberada com badge verde.</li>
+          <li><strong>Horário Corporativo:</strong> <br/>O Nos demais horários, o acesso é restrito a sites de trabalho com badge vermelho.</li>
+        </ul>
+      </article>
+
+      <article class="panel" id="sec-extensao" data-title="3. Extensão e Funcionalidades">
+        <!-- <h2>3. Funcionalidades Detalhadas e Extensão no Navegador</h2> -->
+        <ul class="list">
+          <li><strong>Acesso Rápido:</strong><br/>O Ao clicar no ícone da extensão, você acessa links essenciais da empresa sem abrir nova aba, como E-mail, Domínio, Onvio, Contmatic e outros.</li>
+          <li><strong>Minhas Solicitações:</strong><br/>O Acompanhe pedidos de desbloqueio com status <strong>Pendente</strong>, <strong>Aprovado</strong> e <strong>Rejeitado</strong>.</li>
+          <li><strong>Bloco de Notas e Tarefas:</strong><br/>O Recursos para organizar demandas do dia de forma prática.</li>
+          <li><strong>Privacidade:</strong><br/>O Notas e tarefas ficam salvas somente neste computador (Local Storage) e não são enviadas ao servidor.</li>
+          <li><strong>Histórico Recente:</strong><br/>O Exibe apenas os últimos 5 sites acessados para consulta rápida.</li>
+        </ul>
+      </article>
+
+      <article class="panel" id="sec-intranet" data-title="4. Portal Intranet">
+        <!-- <h2>4. Funcionalidades do Portal (Intranet)</h2> -->
+        <ul class="list">
+          <li><strong>Minhas Solicitações:</strong><br/>O Visualize e acompanhe seus pedidos com a legenda Pendente, Aprovado e Rejeitado.</li>
+          <li><strong>Widgets Drag & Drop:</strong><br/>O Arraste os cards de Notas, Tarefas e Histórico para a ordem que preferir.</li>
+          <li><strong>Bloco de Notas e Tarefas:</strong><br/>O Seus rascunhos e tarefas ficam no seu computador.</li>
+          <li><strong>Histórico Recente:</strong><br/>O Acesso rápido aos últimos 5 sites visitados.</li>
+          <li><strong>Personalização:</strong><br/>O O botão Modo Claro/Escuro salva sua preferência automaticamente.</li>
+        </ul>
+      </article>
+
+      <article class="panel" id="sec-bloqueio" data-title="5. Página de Bloqueio">
+        <!-- <h2>5. Página de Bloqueio (Liberação Provisória)</h2> -->
+        <ul class="list">
+          <li class="preview-card"><strong>Tela oficial de bloqueio da aplicação:</strong><br/>A imagem abaixo representa a tela oficial de bloqueio exibida pela aplicação.
+            <div class="blocked-preview-wrap">
+              <iframe class="blocked-preview-frame" src="blocked.html" title="Tela oficial de bloqueio"></iframe>
+            </div>
+          </li>
+          <li class="official-note"><strong>Validação da tela:</strong><br/>Qualquer tela de bloqueio, erro ou falha com visual diferente desta referência não pertence à aplicação. Nesses casos, acione o suporte de TI imediatamente para verificação.</li>
+          <li><strong>Como funciona:</strong><br/>O Ao encontrar uma página bloqueada, um formulário de solicitação é exibido.</li>
+          <li><strong>Desbloqueio imediato:</strong><br/>O Preencha o motivo e envie. O site entra em lista temporária imediatamente.</li>
+          <li><strong>Delay de redirecionamento:</strong><br/>O Após o envio, aguarde <span class="highlight">5 segundos</span> para redirecionamento automático.</li>
+          <li><strong>Regra obrigatória:</strong><br/>O Informe motivo real e válido, como “Pesquisa para o projeto X”.</li>
+          <li class="warning"><strong>Consequência:</strong><br/>O Solicitações vazias ou inválidas podem gerar bloqueio permanente para acessos futuros.</li>
+        </ul>
+      </article>
+
+      <article class="panel" id="sec-faq" data-title="6. FAQ">
+        <!-- <h2>6. FAQ</h2> -->
+        <ul class="list">
+          <li><strong>Por que um site foi bloqueado?</strong> <br/>O domínio está em regra de bloqueio ou fora da política de navegação corporativa.</li>
+          <li><strong>Como faço para pedir acesso a um site novo?</strong><br/> Acesse a página de bloqueio, informe o motivo e envie a solicitação. <br/>Em caso de urgencia Whatsapp ou Ligação.</li>
+          <li><strong>Para que serve o botão Área Administrativa na extensão?</strong> <br/>É uma área restrita ao suporte de TI.</li>
+        </ul>
+      </article>
+      <article class="panel" id="sec-avisos" data-title="7. Avisos">
+        <ul class="list">
+          <li><strong>Como o aviso funciona:</strong><br/>O aviso aceita texto comum e converte links e imagens automaticamente quando você envia os formatos suportados.</li>
+          <li><strong>Link clicável no aviso:</strong><br/>Você pode usar URL direta (<span class="highlight">https://...</span>), caminho interno (<span class="highlight">ajuda.html</span>) ou markdown (<span class="highlight">[Abrir Ajuda](ajuda.html)</span>).</li>
+          <li><strong>Imagem no aviso:</strong><br/>Use <span class="highlight">IMG: https://site.com/imagem.png</span> ou <span class="highlight">![Logo](https://site.com/imagem.png)</span>.</li>
+          <li><strong>Sem alterar input do servidor:</strong><br/>O servidor continua enviando apenas texto. A extensão interpreta esse texto e exibe link/imagem no painel.</li>
+          <li><strong>Como converter print para URL:</strong><br/>Envie a imagem no ImgBB e use o link direto do arquivo: <a href="https://pt-br.imgbb.com/" target="_blank" rel="noopener noreferrer" class="highlight">https://pt-br.imgbb.com/</a>.</li>
+          <li><strong>Formato correto da URL da imagem:</strong><br/>Prefira link que termine em <span class="highlight">.png</span>, <span class="highlight">.jpg</span> ou <span class="highlight">.webp</span> para garantir exibição no aviso.</li>
+        </ul>
+      </article>
+    </section>
+  </main>
+  <script src="ajuda.js"></script>
+</body>
+</html>

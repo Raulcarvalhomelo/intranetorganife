@@ -1,0 +1,16 @@
+{
+  "name": "organife-server-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "main": "backend/app.js",
+  "scripts": {
+    "start": "node backend/app.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "pkg": "^5.8.1",
+    "sql.js": "1.8.0",
+    "ws": "^8.18.1"
+  }
+}
