@@ -181,7 +181,6 @@ async function loadSettingsFromServer() {
       if (normalizedServerFromSettings && normalizedServerFromSettings !== serverUrl) {
         serverUrl = normalizedServerFromSettings;
         setupSSE();
-        connectWs();
       }
       
       currentSettings = settingsFromJson;
@@ -251,8 +250,6 @@ function loadSettingsFromStorage() {
 loadSettingsFromStorage();
 
 let settingsEventSource = null;
-let wsClient = null;
-let wsRetryTimer = null;
 let sseRetryTimer = null;
 
 function setupSSE() {
@@ -298,45 +295,7 @@ function setupSSE() {
   }
 }
 
-function toWsUrl(url) {
-  try {
-    const u = new URL(url);
-    u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
-    return u.toString().replace(/\/$/, '');
-  } catch {
-    return '';
-  }
-}
-
-function wsSend(payload) {
-  if (wsClient && wsClient.readyState === WebSocket.OPEN) {
-    wsClient.send(JSON.stringify(payload));
-  }
-}
-
-async function connectWs() {
-  if (wsRetryTimer) clearTimeout(wsRetryTimer);
-  const wsUrl = toWsUrl(serverUrl);
-  if (!wsUrl) return;
-  try { if (wsClient) wsClient.close(); } catch {}
-  try {
-    wsClient = new WebSocket(wsUrl);
-    wsClient.onopen = async () => {
-      const windowsUser = await getWindowsUsername();
-      wsSend({ type: 'identify', role: 'extension', browserUser, windowsUser });
-    };
-    wsClient.onmessage = (event) => handleWsMessage(event.data);
-    
-    wsClient.onerror = () => {
-      try { wsClient.close(); } catch {}
-    };
-  } catch {
-    consolo.log('LostConnect')// wsRetryTimer = setTimeout(connectWs, 5000);
-  }
-}
-
 setupSSE();
-connectWs();
 
 browserAPI.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
@@ -349,13 +308,11 @@ browserAPI.storage.onChanged.addListener((changes, area) => {
   if (changes.restrictedPassword) restrictedPassword = String(changes.restrictedPassword.newValue || '').trim();
   if (changes.browserUser) {
     browserUser = changes.browserUser.newValue || '';
-    wsSend({ type: 'identify', role: 'extension', browserUser });
     enforceIdentityAcrossTabs();
   }
   if (changes.serverUrl) {
     serverUrl = normalizeServerUrl(changes.serverUrl.newValue) || serverUrl;
     setupSSE();
-    connectWs();
   }
 });
 
@@ -367,7 +324,6 @@ browserAPI.runtime.onStartup.addListener(() => {
   if (!browserUserLoaded) loadSettingsFromStorage();
   loadSettingsFromServer();
   setupSSE();
-  connectWs();
   enforceIdentityAcrossTabs();
 });
 
@@ -375,7 +331,6 @@ browserAPI.runtime.onInstalled.addListener(() => {
   if (!browserUserLoaded) loadSettingsFromStorage();
   loadSettingsFromServer();
   setupSSE();
-  connectWs();
   enforceIdentityAcrossTabs();
 });
 
@@ -551,7 +506,6 @@ function applySettingsFromDashboard(settings) {
   if (normalizedServerFromSettings && normalizedServerFromSettings !== serverUrl) {
     serverUrl = normalizedServerFromSettings;
     setupSSE();
-    connectWs();
   }
   browserAPI.storage.local.set({
     adminPassword,
@@ -569,93 +523,6 @@ function applySettingsFromDashboard(settings) {
     quickLinks,
     serverUrl
   });
-}
-
-function decideReleaseRequest(decision, req) {
-  return new Promise((resolve) => {
-    browserAPI.storage.local.get(['releaseRequests', 'allowedDomains', 'blockedSites', 'tempAllowedLinks'], (result) => {
-      const requests = result.releaseRequests || [];
-      const allowedDomainsLocal = result.allowedDomains || [];
-      const blockedSitesLocal = result.blockedSites || [];
-      let tempAllowedLinksLocal = result.tempAllowedLinks || [];
-      const idx = requests.findIndex(r =>
-        (req.timestamp && r.timestamp === req.timestamp) ||
-        ((r.domain || '') === (req.domain || '') && (r.reason || '') === (req.reason || ''))
-      );
-      if (idx < 0) return resolve({ success: false, message: 'request-not-found' });
-      const domain = requests[idx].domain;
-      tempAllowedLinksLocal = tempAllowedLinksLocal.filter(d => d !== domain);
-      if (decision === 'approve') {
-        if (!allowedDomainsLocal.includes(domain)) allowedDomainsLocal.push(domain);
-      } else {
-        if (!blockedSitesLocal.includes(domain)) blockedSitesLocal.push(domain);
-      }
-      requests.splice(idx, 1);
-      browserAPI.storage.local.set({
-        releaseRequests: requests,
-        allowedDomains: allowedDomainsLocal,
-        blockedSites: blockedSitesLocal,
-        tempAllowedLinks: tempAllowedLinksLocal
-      }, () => resolve({ success: true, decision, domain }));
-    });
-  });
-}
-
-async function handleWsMessage(raw) {
-  let msg;
-  try { msg = JSON.parse(raw); } catch { return; }
-
-  if (msg.type === 'applySettings' && msg.settings) {
-    applySettingsFromDashboard(msg.settings);
-    return;
-  }
-
-  if (msg.type === 'stateUpdate') {
-    if (msg.settings) applySettingsFromDashboard(msg.settings);
-    if (Array.isArray(msg.releaseRequests)) {
-      browserAPI.storage.local.set({ releaseRequests: msg.releaseRequests });
-    }
-    return;
-  }
-
-  if (msg.type !== 'command') return;
-
-  let data = { ok: true };
-  if (msg.action === 'applySettings' && msg.payload?.settings) {
-    applySettingsFromDashboard(msg.payload.settings);
-    data = { success: true };
-  } else if (msg.action === 'getUserInfo') {
-    data = { browserUser, windowsUser: await getWindowsUsername() };
-  } else if (msg.action === 'getLogs') {
-    data = await new Promise((resolve) => {
-      browserAPI.storage.local.get(['activityLogs'], (result) => resolve({ logs: result.activityLogs || [] }));
-    });
-  } else if (msg.action === 'pullLogs') {
-    data = await new Promise((resolve) => {
-      browserAPI.storage.local.get(['activityLogs'], (result) => {
-        const logs = Array.isArray(result.activityLogs) ? result.activityLogs : [];
-        browserAPI.storage.local.set({ activityLogs: [] }, () => {
-          resolve({ logs });
-        });
-      });
-    });
-  } else if (msg.action === 'getRastreio') {
-    data = await new Promise((resolve) => {
-      browserAPI.storage.local.get(['activityLogs'], (result) => {
-        const logs = (result.activityLogs || []).filter(l => l.action === 'navigation');
-        const cutoff = Date.now() - 72 * 60 * 60 * 1000;
-        resolve({ rastreio: logs.filter(l => new Date(l.timestamp).getTime() > cutoff) });
-      });
-    });
-  } else if (msg.action === 'getReleaseRequests') {
-    data = await new Promise((resolve) => {
-      browserAPI.storage.local.get(['releaseRequests'], (result) => resolve({ requests: result.releaseRequests || [] }));
-    });
-  } else if (msg.action === 'decideRequest') {
-    data = await decideReleaseRequest(msg.payload?.decision, msg.payload?.request || {});
-  }
-
-  wsSend({ type: 'response', requestId: msg.requestId, data });
 }
 
 function resolveAccessRole(password) {
@@ -779,7 +646,6 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
         serverUrl = normalized;
         browserAPI.storage.local.set({ serverUrl });
         setupSSE();
-        connectWs();
         sendResponse({ success: true, serverUrl });
       }
       break;
@@ -918,7 +784,6 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
           companyNotice
         }, () => {
           setupSSE();
-          connectWs();
           sendResponse({ success: true });
         });
         return true;
