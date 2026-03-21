@@ -15,8 +15,7 @@ test.after(async () => {
 test('GET /health retorna ok e timestamp', async () => {
   const res = await harness.request('/health');
   assert.equal(res.status, 200);
-  const body = await res.json();
-  assert.equal(body.ok, true);
-  assert.equal(typeof body.now, 'string');
-  assert.ok(body.now.includes('T'));
+  const data = await res.json();
+  assert.equal(data.ok, true);
+  assert.ok(typeof data.now === 'string' && data.now.includes('T'));
 });

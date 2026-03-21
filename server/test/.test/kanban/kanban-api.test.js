@@ -13,71 +13,97 @@ test.after(async () => {
 });
 
 test('Kanban API - Card Sync and Department Filtering', async () => {
-  const suffix = Date.now().toString(36);
-  const deptA = `Fiscal-${suffix}`;
-  const deptB = `DP-${suffix}`;
-  const cardA = `card-a-${suffix}`;
-  const cardB = `card-b-${suffix}`;
-  const cardShared = `card-shared-${suffix}`;
+  const deptA = 'financeiro';
+  const deptB = 'comercial';
 
-  const postA = await harness.requestJson('/api/kanban/card', {
-    id: cardA,
-    title: 'Task for Fiscal',
+  const now = Date.now();
+  const cardA = {
+    id: 'card-a',
+    title: 'A',
+    description: '',
     status: 'todo',
-    departments: [deptA],
-    updated_at: Date.now()
-  });
+    priority: 'med',
+    dueAt: null,
+    tags: [],
+    attachments: [],
+    sprintId: null,
+    recurrence: { type: 'none', lastTrigger: 0 },
+    createdAt: now,
+    updatedAt: now,
+    deleted: 0,
+    departments: ['Financeiro']
+  };
+
+  const cardB = {
+    ...cardA,
+    id: 'card-b',
+    title: 'B',
+    departments: ['Comercial']
+  };
+
+  const cardShared = {
+    ...cardA,
+    id: 'card-shared',
+    title: 'S',
+    departments: ['Financeiro', 'Comercial']
+  };
+
+  const postA = await harness.requestJson('/api/kanban/card', cardA);
   assert.equal(postA.status, 201);
-
-  const postB = await harness.requestJson('/api/kanban/card', {
-    id: cardB,
-    title: 'Task for DP',
-    status: 'doing',
-    departments: [deptB],
-    updated_at: Date.now()
-  });
+  const postB = await harness.requestJson('/api/kanban/card', cardB);
   assert.equal(postB.status, 201);
-
-  const postShared = await harness.requestJson('/api/kanban/card', {
-    id: cardShared,
-    title: 'Task for Both',
-    status: 'done',
-    departments: [deptA, deptB],
-    updated_at: Date.now()
-  });
+  const postShared = await harness.requestJson('/api/kanban/card', cardShared);
   assert.equal(postShared.status, 201);
 
   const getDeptARes = await harness.request(`/api/kanban/cards?department=${encodeURIComponent(deptA)}`);
   assert.equal(getDeptARes.status, 200);
-  const deptAData = await getDeptARes.json();
-  const deptACards = Array.isArray(deptAData.cards) ? deptAData.cards : [];
-
-  assert.ok(deptACards.some((card) => card.id === cardA));
-  assert.ok(deptACards.some((card) => card.id === cardShared));
-  assert.ok(!deptACards.some((card) => card.id === cardB));
+  const deptAJson = await getDeptARes.json();
+  const deptAList = deptAJson.cards;
+  assert.ok(Array.isArray(deptAList));
+  assert.ok(deptAList.some((c) => c.id === 'card-a'));
+  assert.ok(deptAList.some((c) => c.id === 'card-shared'));
+  assert.ok(!deptAList.some((c) => c.id === 'card-b'));
 
   const getDeptBRes = await harness.request(`/api/kanban/cards?department=${encodeURIComponent(deptB)}`);
   assert.equal(getDeptBRes.status, 200);
-  const deptBData = await getDeptBRes.json();
-  const deptBCards = Array.isArray(deptBData.cards) ? deptBData.cards : [];
+  const deptBJson = await getDeptBRes.json();
+  const deptBList = deptBJson.cards;
+  assert.ok(Array.isArray(deptBList));
+  assert.ok(deptBList.some((c) => c.id === 'card-b'));
+  assert.ok(deptBList.some((c) => c.id === 'card-shared'));
+  assert.ok(!deptBList.some((c) => c.id === 'card-a'));
 
-  assert.ok(deptBCards.some((card) => card.id === cardB));
-  assert.ok(deptBCards.some((card) => card.id === cardShared));
-  assert.ok(!deptBCards.some((card) => card.id === cardA));
-
-  const deleteShared = await harness.requestJson('/api/kanban/card', {
-    id: cardShared,
-    deleted: 1,
-    updated_at: Date.now() + 1000
-  });
+  const deleteShared = await harness.requestJson('/api/kanban/card', { ...cardShared, deleted: 1, updatedAt: now + 10 });
   assert.equal(deleteShared.status, 201);
 
   const getDeptAAfterDelete = await harness.request(`/api/kanban/cards?department=${encodeURIComponent(deptA)}`);
   assert.equal(getDeptAAfterDelete.status, 200);
-  const deptAAfterDeleteData = await getDeptAAfterDelete.json();
-  const deptAAfterDeleteCards = Array.isArray(deptAAfterDeleteData.cards) ? deptAAfterDeleteData.cards : [];
-  assert.ok(!deptAAfterDeleteCards.some((card) => card.id === cardShared));
+  const deptAAfterJson = await getDeptAAfterDelete.json();
+  const deptAAfter = deptAAfterJson.cards;
+  assert.ok(!deptAAfter.some((c) => c.id === 'card-shared'));
 
   const getWithoutDepartment = await harness.request('/api/kanban/cards');
   assert.equal(getWithoutDepartment.status, 400);
+});
+
+test('Kanban API - deve exigir departamento', async () => {
+  const now = Date.now();
+  const card = {
+    id: 'card-no-dept',
+    title: 'X',
+    description: '',
+    status: 'todo',
+    priority: 'med',
+    dueAt: null,
+    tags: [],
+    attachments: [],
+    sprintId: null,
+    recurrence: { type: 'none', lastTrigger: 0 },
+    createdAt: now,
+    updatedAt: now,
+    deleted: 0,
+    departments: []
+  };
+  const res = await harness.requestJson('/api/kanban/card', card);
+  assert.equal(res.status, 400);
 });

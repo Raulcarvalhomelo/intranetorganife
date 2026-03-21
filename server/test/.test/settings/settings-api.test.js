@@ -13,38 +13,51 @@ test.after(async () => {
 });
 
 test('GET e POST /settings aplicam regras de configuração', async () => {
-  const getBefore = await harness.request('/settings');
-  assert.equal(getBefore.status, 200);
-  const beforeBody = await getBefore.json();
-  assert.ok(Array.isArray(beforeBody.blockedSites));
+  const initial = await harness.request('/settings');
+  assert.equal(initial.status, 200);
+  const initialData = await initial.json();
+  assert.ok(initialData && typeof initialData === 'object');
 
-  const updatePayload = {
-    companyName: 'Empresa Teste',
-    blockedSites: ['bloqueado.com', 'bloqueado.com'],
-    allowedDomains: ['liberado.com', 'liberado.com'],
-    blockedKeywords: ['jogo', 'jogo']
+  const payload = {
+    totalBlockMode: true,
+    blockedSites: ['*.example.com', '*.example.com'],
+    allowedDomains: ['*.allowed.com', '*.allowed.com'],
+    tempAllowedLinks: ['*.temp.com', '*.temp.com'],
+    blockedKeywords: ['x', 'x'],
+    allowedLinks: ['https://allowed-link.example', 'https://allowed-link.example']
   };
-  const postRes = await harness.requestJson('/settings', updatePayload);
-  assert.equal(postRes.status, 200);
-  const postBody = await postRes.json();
-  assert.equal(postBody.companyName, 'Empresa Teste');
-  assert.deepEqual(postBody.blockedSites, ['bloqueado.com']);
-  assert.deepEqual(postBody.allowedDomains, ['liberado.com']);
-  assert.deepEqual(postBody.blockedKeywords, ['jogo']);
+
+  const post = await harness.requestJson('/settings', payload);
+  assert.equal(post.status, 200);
+  const saved = await post.json();
+
+  assert.equal(saved.totalBlockMode, true);
+  assert.deepEqual(saved.blockedSites, ['*.example.com']);
+  assert.deepEqual(saved.allowedDomains, ['*.allowed.com']);
+  assert.deepEqual(saved.tempAllowedLinks, ['*.temp.com']);
+  assert.deepEqual(saved.blockedKeywords, ['x']);
+  assert.deepEqual(saved.allowedLinks, ['https://allowed-link.example']);
+
+  const after = await harness.request('/settings');
+  assert.equal(after.status, 200);
+  const afterData = await after.json();
+  assert.deepEqual(afterData.blockedSites, ['*.example.com']);
 });
 
 test('POST /api/check-site respeita bloqueio e liberação', async () => {
-  const setupRes = await harness.requestJson('/settings', {
-    blockedSites: ['portal.bloqueado.com'],
-    allowedDomains: ['dominio.liberado.com']
+  const post = await harness.requestJson('/settings', {
+    blockedSites: ['*.blocked.com'],
+    allowedDomains: ['*.blocked.com', '*.allowed.com']
   });
-  assert.equal(setupRes.status, 200);
+  assert.equal(post.status, 200);
 
-  const blockedRes = await harness.requestJson('/api/check-site', { domain: 'https://portal.bloqueado.com/path' });
-  assert.equal(blockedRes.status, 200);
-  assert.deepEqual(await blockedRes.json(), { status: 'blocked' });
+  const blocked = await harness.requestJson('/api/check-site', { domain: 'https://www.blocked.com/path' });
+  assert.equal(blocked.status, 200);
+  const blockedData = await blocked.json();
+  assert.equal(blockedData.status, 'blocked');
 
-  const allowedRes = await harness.requestJson('/api/check-site', { domain: 'https://dominio.liberado.com/home' });
-  assert.equal(allowedRes.status, 200);
-  assert.deepEqual(await allowedRes.json(), { status: 'allowed' });
+  const allowed = await harness.requestJson('/api/check-site', { domain: 'https://www.allowed.com/path' });
+  assert.equal(allowed.status, 200);
+  const allowedData = await allowed.json();
+  assert.equal(allowedData.status, 'allowed');
 });

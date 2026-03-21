@@ -1,11 +1,7 @@
-const path = require('path');
-const fs = require('fs');
-const os = require('os');
-const { spawn } = require('child_process');
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const path = require('node:path');
+const fs = require('node:fs');
+const os = require('node:os');
+const { spawn } = require('node:child_process');
 
 function uniquePort() {
   const base = 15000;
@@ -31,49 +27,51 @@ async function readJson(filePath, fallback) {
   }
 }
 
-async function waitForServerReady(child, timeoutMs = 15000) {
-  const startedAt = Date.now();
+function waitForServerReady(child, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
-    let stdoutBuffer = '';
-    let stderrBuffer = '';
     let settled = false;
+    let stderrBuffer = '';
+    let stdoutBuffer = '';
+
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(`Timeout aguardando servidor iniciar. stderr=${stderrBuffer}`));
+    }, timeoutMs);
+
     const onData = (chunk) => {
       const text = String(chunk || '');
       stdoutBuffer += text;
       if (stdoutBuffer.includes('Server running on')) {
+        if (settled) return;
         settled = true;
         cleanup();
         resolve();
       }
     };
+
     const onErrData = (chunk) => {
       stderrBuffer += String(chunk || '');
     };
+
     const onExit = (code) => {
       if (settled) return;
       settled = true;
       cleanup();
       reject(new Error(`Servidor encerrou antes de iniciar. code=${code} stderr=${stderrBuffer}`));
     };
-    const onTimeout = () => {
-      if (settled) return;
-      if (Date.now() - startedAt < timeoutMs) {
-        setTimeout(onTimeout, 100);
-        return;
-      }
-      settled = true;
-      cleanup();
-      reject(new Error(`Timeout aguardando servidor iniciar. stderr=${stderrBuffer}`));
-    };
+
     const cleanup = () => {
+      clearTimeout(timeout);
       child.stdout.off('data', onData);
       child.stderr.off('data', onErrData);
       child.off('exit', onExit);
     };
+
     child.stdout.on('data', onData);
     child.stderr.on('data', onErrData);
     child.on('exit', onExit);
-    setTimeout(onTimeout, 100);
   });
 }
 
@@ -99,7 +97,8 @@ function normalizeState(state) {
   return {
     auth: {
       ...(current.auth || {}),
-      dashboardPassword: 'asdf'
+      dashboardPassword: 'asdf',
+      dashboardViewerPassword: 'zzzz'
     },
     settings: {
       adminPassword: String(currentSettings.adminPassword || ''),
@@ -109,15 +108,15 @@ function normalizeState(state) {
       companyNotice: String(currentSettings.companyNotice || ''),
       serverUrl: String(currentSettings.serverUrl || 'http://localhost:1337'),
       quickLinks: Array.isArray(currentSettings.quickLinks) ? currentSettings.quickLinks : [],
-      blockedKeywords: [],
-      blockedSites: [],
-      allowedLinks: [],
-      allowedDomains: [],
-      tempAllowedLinks: [],
+      blockedKeywords: Array.isArray(currentSettings.blockedKeywords) ? currentSettings.blockedKeywords : [],
+      blockedSites: Array.isArray(currentSettings.blockedSites) ? currentSettings.blockedSites : [],
+      allowedLinks: Array.isArray(currentSettings.allowedLinks) ? currentSettings.allowedLinks : [],
+      allowedDomains: Array.isArray(currentSettings.allowedDomains) ? currentSettings.allowedDomains : [],
+      tempAllowedLinks: Array.isArray(currentSettings.tempAllowedLinks) ? currentSettings.tempAllowedLinks : [],
       totalBlockMode: Boolean(currentSettings.totalBlockMode),
       browserUser: String(currentSettings.browserUser || '')
     },
-    releaseRequests: [],
+    releaseRequests: Array.isArray(current.releaseRequests) ? current.releaseRequests : [],
     logs: []
   };
 }
@@ -128,18 +127,28 @@ async function createServerHarness() {
   const dbDir = path.join(serverDir, 'database');
   const runtimeStatePath = path.join(dbDir, 'runtime-state.json');
   const logsDir = path.join(dbDir, 'logs');
+  const kanbanDbPath = path.join(dbDir, 'kanban.db');
+
   const backupRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'organife-server-test-'));
   const backupRuntimePath = path.join(backupRoot, 'runtime-state.json');
   const backupLogsDir = path.join(backupRoot, 'logs');
+  const backupKanbanPath = path.join(backupRoot, 'kanban.db');
 
   const runtimeExisted = await exists(runtimeStatePath);
   if (runtimeExisted) {
     const runtimeRaw = await fs.promises.readFile(runtimeStatePath, 'utf8');
     await fs.promises.writeFile(backupRuntimePath, runtimeRaw, 'utf8');
   }
+
   await fs.promises.mkdir(backupLogsDir, { recursive: true });
   if (await exists(logsDir)) {
     await fs.promises.cp(logsDir, backupLogsDir, { recursive: true, force: true });
+  }
+
+  const kanbanExisted = await exists(kanbanDbPath);
+  if (kanbanExisted) {
+    const rawDb = await fs.promises.readFile(kanbanDbPath);
+    await fs.promises.writeFile(backupKanbanPath, rawDb);
   }
 
   await fs.promises.mkdir(dbDir, { recursive: true });
@@ -157,12 +166,18 @@ async function createServerHarness() {
     cwd: serverDir,
     env: {
       ...process.env,
-      PORT: String(port)
+      PORT: String(port),
+      LOG_FLUSH_INTERVAL_MS: '200'
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });
 
-  await waitForServerReady(child);
+  try {
+    await waitForServerReady(child);
+  } catch (error) {
+    await stopProcess(child);
+    throw error;
+  }
 
   async function cleanup() {
     await stopProcess(child);
@@ -179,6 +194,13 @@ async function createServerHarness() {
       if (await exists(backupLogsDir)) {
         await fs.promises.cp(backupLogsDir, logsDir, { recursive: true, force: true });
       }
+
+      if (kanbanExisted && await exists(backupKanbanPath)) {
+        const rawDb = await fs.promises.readFile(backupKanbanPath);
+        await fs.promises.writeFile(kanbanDbPath, rawDb);
+      } else if (!kanbanExisted) {
+        await fs.promises.rm(kanbanDbPath, { force: true });
+      }
     } finally {
       await fs.promises.rm(backupRoot, { recursive: true, force: true });
     }
@@ -194,19 +216,16 @@ async function createServerHarness() {
       'content-type': 'application/json',
       ...(options.headers || {})
     };
-    const nextOptions = {
+    return request(pathname, {
       ...options,
       method: 'POST',
       headers: nextHeaders,
       body: JSON.stringify(payload)
-    };
-    return request(pathname, {
-      ...nextOptions
     });
   }
 
-  async function loginDashboard() {
-    const response = await requestJson('/dashboard/login', { username: 'admin', password: 'asdf' });
+  async function loginDashboard(username = 'admin', password = 'asdf') {
+    const response = await requestJson('/dashboard/login', { username, password });
     const rawCookie = response.headers.get('set-cookie') || '';
     const cookie = rawCookie.split(';')[0];
     return { response, cookie };
@@ -216,7 +235,6 @@ async function createServerHarness() {
     request,
     requestJson,
     loginDashboard,
-    sleep,
     cleanup
   };
 }
