@@ -745,6 +745,25 @@
     .kanban-modal-close:hover {
       background: rgba(51, 65, 85, 0.9);
     }
+    .kanban-preview-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
+    .kanban-preview-open-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+    }
+    .kanban-preview-frame {
+      width: 100%;
+      border: 0;
+      background: #0f172a;
+      min-height: calc(100vh - 180px);
+      height: calc(100vh - 180px);
+    }
     .kanban-toolbar {
       display: grid;
       gap: 8px;
@@ -1840,7 +1859,7 @@
           </div>
           <div class="open-kanban-actions">
             <button type="button" class="open-kanban-btn" id="openKanbanBtn">Abrir Kanban</button>
-            <a class="open-kanban-btn open-kanban-link" href="intranet.html?view=kanban">Página completa</a>
+            <a class="open-kanban-btn open-kanban-link" href="kanban.html">Página completa</a>
           </div>
         </section>
         
@@ -1998,6 +2017,17 @@
         <button type="button" class="kanban-inline-btn kanban-save-btn" id="saveTaskDetailsBtn">Salvar</button>
       </div>
     </aside>
+  </div>
+  <div class="kanban-overlay" id="kanbanPreviewOverlay" aria-hidden="true">
+    <section class="kanban-modal" role="dialog" aria-modal="true" aria-label="Preview do Kanban">
+      <div class="kanban-modal-header">
+        <h2 class="kanban-modal-title">Preview do Kanban</h2>
+        <div class="kanban-preview-actions">
+          <a class="kanban-modal-close kanban-preview-open-link" id="openKanbanPreviewPageLink" href="kanban.html">Abrir página completa</a>
+        </div>
+      </div>
+      <iframe class="kanban-preview-frame" id="kanbanPreviewFrame" title="Preview Kanban" src="kanban.html"></iframe>
+    </section>
   </div>
   <script src="intranet.js"></script>
 </body>

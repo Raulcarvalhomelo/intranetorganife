@@ -985,6 +985,10 @@ function initTodos() {
   const openKanbanBtn = document.getElementById('openKanbanBtn');
   const closeKanbanBtn = document.getElementById('closeKanbanBtn');
   const kanbanOverlay = document.getElementById('kanbanOverlay');
+  const kanbanPreviewOverlay = document.getElementById('kanbanPreviewOverlay');
+  const closeKanbanPreviewBtn = document.getElementById('closeKanbanPreviewBtn');
+  const openKanbanPreviewPageLink = document.getElementById('openKanbanPreviewPageLink');
+  const kanbanPreviewFrame = document.getElementById('kanbanPreviewFrame');
   const kanbanTodoList = document.getElementById('kanbanTodoList');
   const kanbanDoingList = document.getElementById('kanbanDoingList');
   const kanbanDoneList = document.getElementById('kanbanDoneList');
@@ -1041,6 +1045,13 @@ function initTodos() {
     document.body.classList.add('kanban-page-mode');
     document.title = 'Kanban - Portal Corporativo';
     closeKanbanBtn.textContent = 'Voltar ao portal';
+  }
+  const kanbanPageUrl = browserAPI.runtime.getURL('kanban.html');
+  if (openKanbanPreviewPageLink) {
+    openKanbanPreviewPageLink.href = kanbanPageUrl;
+  }
+  if (kanbanPreviewFrame) {
+    kanbanPreviewFrame.src = kanbanPageUrl;
   }
 
   const statuses = ['todo', 'doing', 'done'];
@@ -2123,6 +2134,15 @@ function initTodos() {
   }
 
   function openKanban() {
+    if (kanbanPreviewOverlay) {
+      if (kanbanPreviewFrame) {
+        kanbanPreviewFrame.src = `${kanbanPageUrl}?preview=${Date.now()}`;
+      }
+      kanbanPreviewOverlay.classList.add('is-open');
+      kanbanPreviewOverlay.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      return;
+    }
     kanbanOverlay.classList.add('is-open');
     kanbanOverlay.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
@@ -2132,6 +2152,12 @@ function initTodos() {
   function closeKanban() {
     if (isKanbanPageMode) {
       window.location.href = browserAPI.runtime.getURL('intranet.html');
+      return;
+    }
+    if (kanbanPreviewOverlay && kanbanPreviewOverlay.classList.contains('is-open')) {
+      kanbanPreviewOverlay.classList.remove('is-open');
+      kanbanPreviewOverlay.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
       return;
     }
     closeDetails();
@@ -2181,6 +2207,9 @@ function initTodos() {
 
   openKanbanBtn.addEventListener('click', openKanban);
   closeKanbanBtn.addEventListener('click', closeKanban);
+  if (closeKanbanPreviewBtn) {
+    closeKanbanPreviewBtn.addEventListener('click', closeKanban);
+  }
   closeKanbanDetailsBtn.addEventListener('click', closeDetails);
   cancelTaskDetailsBtn.addEventListener('click', closeDetails);
   saveTaskDetailsBtn.addEventListener('click', saveDetails);
@@ -2233,9 +2262,22 @@ function initTodos() {
   kanbanOverlay.addEventListener('click', (event) => {
     if (event.target === kanbanOverlay) closeKanban();
   });
+  if (kanbanPreviewOverlay) {
+    kanbanPreviewOverlay.addEventListener('click', (event) => {
+      if (event.target === kanbanPreviewOverlay) closeKanban();
+    });
+  }
+  window.addEventListener('message', (event) => {
+    if (!kanbanPreviewOverlay || !kanbanPreviewFrame) return;
+    if (event.source !== kanbanPreviewFrame.contentWindow) return;
+    if (!event.data || event.data.type !== 'kanban-preview-close-request') return;
+    closeKanban();
+  });
   document.addEventListener('keydown', (event) => {
-    if (event.key !== 'Escape' || !kanbanOverlay.classList.contains('is-open')) return;
-    if (kanbanDetailsPanel.classList.contains('is-open')) {
+    const isKanbanOverlayOpen = kanbanOverlay.classList.contains('is-open');
+    const isPreviewOverlayOpen = Boolean(kanbanPreviewOverlay && kanbanPreviewOverlay.classList.contains('is-open'));
+    if (event.key !== 'Escape' || (!isKanbanOverlayOpen && !isPreviewOverlayOpen)) return;
+    if (isKanbanOverlayOpen && kanbanDetailsPanel.classList.contains('is-open')) {
       closeDetails();
       return;
     }
