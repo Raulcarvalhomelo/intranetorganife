@@ -12,7 +12,7 @@
     "serverUrl": "http://192.168.6.4:1337",
     "quickLinks": [
       {
-        "name": "t",
+        "name": "tss",
         "url": "https://original.com.br"
       },
       {
@@ -30,9 +30,10 @@
     ],
     "blockedKeywords": [],
     "blockedSites": [
+      "*.bing.com",
+      "*.track.wargaming-aff.com",
       "*.worldofwarships.com",
-      "*.original.com.br",
-      "*.bing.com"
+      "*.original.com.br"
     ],
     "allowedLinks": [],
     "allowedDomains": [
@@ -43,12 +44,35 @@
     ],
     "tempAllowedLinks": [
       "*.newtab",
-      "*.startpageshared"
+      "*.startpageshared",
+      "*.s.click.aliexpress.com"
     ],
     "totalBlockMode": true,
     "browserUser": ""
   },
   "releaseRequests": [
+    {
+      "id": 1774149151337,
+      "clientRequestId": "1774149151333-fb28335d793e4",
+      "domain": "*.s.click.aliexpress.com",
+      "reason": "z\\x",
+      "user": "vv",
+      "browser": "Opera",
+      "originalUrl": "https://s.click.aliexpress.com/e/_DFpsrW9?dp=gx-br-aliexpress-aliexpress-sd",
+      "timestamp": "2026-03-22T03:12:31.333Z",
+      "status": "pendente"
+    },
+    {
+      "id": 1774149003021,
+      "clientRequestId": "1774149003016-f24badfd506f68",
+      "domain": "*.track.wargaming-aff.com",
+      "reason": "sds",
+      "user": "vv",
+      "browser": "Opera",
+      "originalUrl": "https://track.wargaming-aff.com/click?pid=6808&offer_id=70&sub1=gx-br-wargaming-worldofwarships-sd",
+      "timestamp": "2026-03-22T03:10:03.016Z",
+      "status": "bloqueado_admin"
+    },
     {
       "id": 1774142947867,
       "clientRequestId": "1774142947863-a86b813b74423",

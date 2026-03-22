@@ -27,6 +27,9 @@ const LOG_CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
 let browserUserLoaded = false;
 let logsDbPromise = null;
 let lastLogsCleanupAt = 0;
+const NAVIGATION_DEDUPE_WINDOW_MS = 700;
+const NAVIGATION_DEDUPE_MAX_ENTRIES = 2000;
+const recentNavigationChecks = new Map();
 
 function normalizeServerUrl(rawUrl) {
   const value = String(rawUrl || '').trim();
@@ -606,6 +609,51 @@ function isBrasiliaFreeWindow() {
   return hour === 12;
 }
 
+function buildNavigationCheckKey(tabId, url) {
+  return `${tabId}|${String(url || '').trim().toLowerCase()}`;
+}
+
+function pruneRecentNavigationChecks(now) {
+  if (recentNavigationChecks.size <= NAVIGATION_DEDUPE_MAX_ENTRIES) return;
+  for (const [key, timestamp] of recentNavigationChecks) {
+    if (now - timestamp > NAVIGATION_DEDUPE_WINDOW_MS) {
+      recentNavigationChecks.delete(key);
+    }
+    if (recentNavigationChecks.size <= NAVIGATION_DEDUPE_MAX_ENTRIES) return;
+  }
+  if (recentNavigationChecks.size <= NAVIGATION_DEDUPE_MAX_ENTRIES) return;
+  const overflowCount = recentNavigationChecks.size - NAVIGATION_DEDUPE_MAX_ENTRIES;
+  let removed = 0;
+  for (const key of recentNavigationChecks.keys()) {
+    recentNavigationChecks.delete(key);
+    removed += 1;
+    if (removed >= overflowCount) break;
+  }
+}
+
+function shouldSkipNavigationBlocking(tabId, url) {
+  if (typeof tabId !== 'number' || tabId < 0) return false;
+  const normalizedUrl = String(url || '').trim();
+  if (!normalizedUrl) return false;
+  const now = Date.now();
+  const key = buildNavigationCheckKey(tabId, normalizedUrl);
+  const previousTimestamp = recentNavigationChecks.get(key);
+  recentNavigationChecks.set(key, now);
+  pruneRecentNavigationChecks(now);
+  return typeof previousTimestamp === 'number' && (now - previousTimestamp) <= NAVIGATION_DEDUPE_WINDOW_MS;
+}
+
+function processNavigationBlocking(tabId, url) {
+  if (shouldSkipNavigationBlocking(tabId, url)) return;
+  if (!shouldBlockUrl(url)) return;
+  const blockedPageBase = browserAPI.runtime.getURL('blocked.html');
+  logActivity('blocked', {
+    url
+  });
+  const blockedPageUrl = blockedPageBase + '?url=' + encodeURIComponent(url);
+  browserAPI.tabs.update(tabId, { url: blockedPageUrl });
+}
+
 // Check if URL should be blocked
 function shouldBlockUrl(url) {
   if (isExtensionPage(url)) return false;
@@ -1036,7 +1084,6 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // Tab update listener - block URLs
 browserAPI.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.url) {
-    const blockedPageBase = browserAPI.runtime.getURL('blocked.html');
     const identityPageBase = getIdentityPageBase();
     if (changeInfo.url.startsWith(identityPageBase)) return;
     if (enforceIdentityWithStorageFallback(tabId, changeInfo.url)) return;
@@ -1045,14 +1092,8 @@ browserAPI.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       url: changeInfo.url,
       title: tab.title
     });
-    
-    if (shouldBlockUrl(changeInfo.url)) {
-      logActivity('blocked', {
-        url: changeInfo.url
-      });
-      const blockedPageUrl = blockedPageBase + '?url=' + encodeURIComponent(changeInfo.url);
-      browserAPI.tabs.update(tabId, { url: blockedPageUrl });
-    }
+
+    processNavigationBlocking(tabId, changeInfo.url);
   }
 });
 
@@ -1067,17 +1108,10 @@ browserAPI.downloads.onCreated.addListener((downloadItem) => {
 
 // Web navigation listener for better URL tracking
 browserAPI.webNavigation.onBeforeNavigate.addListener((details) => {
-  const blockedPageBase = browserAPI.runtime.getURL('blocked.html');
   const identityPageBase = getIdentityPageBase();
   if (details.url.startsWith(identityPageBase)) return;
 
   if (details.frameId === 0 && enforceIdentityWithStorageFallback(details.tabId, details.url)) return;
-
-  if (details.frameId === 0 && shouldBlockUrl(details.url)) {
-    logActivity('blocked', {
-      url: details.url
-    });
-    const blockedPageUrl = blockedPageBase + '?url=' + encodeURIComponent(details.url);
-    browserAPI.tabs.update(details.tabId, { url: blockedPageUrl });
-  }
+  if (details.frameId !== 0) return;
+  processNavigationBlocking(details.tabId, details.url);
 });
