@@ -742,6 +742,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (deleteBtn) {
       deleteBtn.addEventListener('click', (event) => {
         event.stopPropagation();
+        const confirmed = window.confirm('Tem certeza que deseja excluir este card?');
+        if (!confirmed) return;
         deleteTodo(todo.id);
       });
     }
@@ -1184,6 +1186,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   clearBtn.addEventListener('click', () => {
     const doneTodos = todosState.filter((todo) => todo.status === 'done');
+    if (!doneTodos.length) return;
+    const clearConfirmed = window.confirm('Tem certeza que deseja excluir todos os cards concluídos?');
+    if (!clearConfirmed) return;
     const payloads = doneTodos.map((todo) => serializeTodoForSync({ ...todo, deleted: 1, updatedAt: Date.now() }));
     todosState = todosState.filter((todo) => todo.status !== 'done');
     orderByStatusState.done = [];
@@ -1197,6 +1202,11 @@ document.addEventListener('DOMContentLoaded', () => {
   toggleAllBtn.addEventListener('click', () => {
     if (!todosState.length) return;
     const allDone = todosState.every((todo) => todo.status === 'done');
+    const toggleMessage = allDone
+      ? 'Tem certeza que deseja marcar todos os cards como pendentes?'
+      : 'Tem certeza que deseja marcar todos os cards como concluídos?';
+    const toggleConfirmed = window.confirm(toggleMessage);
+    if (!toggleConfirmed) return;
     const target = allDone ? 'todo' : 'done';
     const updatedAt = Date.now();
     todosState = todosState.map((todo) => ({
