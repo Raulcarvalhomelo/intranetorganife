@@ -30,27 +30,51 @@
     ],
     "blockedKeywords": [],
     "blockedSites": [
-      "*.bing.com",
-      "*.track.wargaming-aff.com",
-      "*.worldofwarships.com",
-      "*.original.com.br"
+      "*.worldofwarships.com"
     ],
     "allowedLinks": [],
     "allowedDomains": [
       "*.extensions",
       "*.web.whatsapp.com",
       "*.booking.com",
-      "*.fitgirl-repacks.site"
+      "*.fitgirl-repacks.site",
+      "*.track.wargaming-aff.com",
+      "*.original.com.br",
+      "*.bing.com"
     ],
     "tempAllowedLinks": [
       "*.newtab",
       "*.startpageshared",
-      "*.s.click.aliexpress.com"
+      "*.s.click.aliexpress.com",
+      "*.youtube.com",
+      "*.cisco.com"
     ],
     "totalBlockMode": true,
     "browserUser": ""
   },
   "releaseRequests": [
+    {
+      "id": 1774210088843,
+      "clientRequestId": "1774210088837-ce98c46f4cf2d8",
+      "domain": "*.cisco.com",
+      "reason": "hfghf",
+      "user": "rshod",
+      "browser": "Edge",
+      "originalUrl": "https://www.cisco.com/c/en/us/products/interfaces-modules/ons-15454-60g-5g-ho-lo-xc-vxc-cross-connect-card/index.html",
+      "timestamp": "2026-03-22T20:08:08.837Z",
+      "status": "pendente"
+    },
+    {
+      "id": 1774207733845,
+      "clientRequestId": "1774207733839-3806626a6b522",
+      "domain": "*.youtube.com",
+      "reason": "sadasdas",
+      "user": "rshod",
+      "browser": "Edge",
+      "originalUrl": "https://www.youtube.com/",
+      "timestamp": "2026-03-22T19:28:53.839Z",
+      "status": "pendente"
+    },
     {
       "id": 1774149151337,
       "clientRequestId": "1774149151333-fb28335d793e4",
@@ -71,7 +95,7 @@
       "browser": "Opera",
       "originalUrl": "https://track.wargaming-aff.com/click?pid=6808&offer_id=70&sub1=gx-br-wargaming-worldofwarships-sd",
       "timestamp": "2026-03-22T03:10:03.016Z",
-      "status": "bloqueado_admin"
+      "status": "aprovado_admin"
     },
     {
       "id": 1774142947867,
@@ -82,7 +106,7 @@
       "browser": "Edge",
       "originalUrl": "https://original.com.br/",
       "timestamp": "2026-03-22T01:29:07.863Z",
-      "status": "bloqueado_admin"
+      "status": "aprovado_admin"
     },
     {
       "id": 1774142548206,
@@ -93,7 +117,7 @@
       "browser": "Edge",
       "originalUrl": "https://www.bing.com/search?q=*.worldofwarships.com&cvid=802ddd865ecd4823bf6621649b965ba2&gs_lcrp=EgRlZGdlKgYIABBFGDkyBggAEEUYOTIGCAEQABhAMgYIAhAAGEAyBggDEAAYQDIGCAQQABhAMgYIBRAAGEAyBggGEAAYQDIGCAcQABhAMgYICBAAGEDSAQc2MjdqMGoxqAIAsAIA&FORM=ANAB01&PC=U531",
       "timestamp": "2026-03-22T01:22:28.202Z",
-      "status": "bloqueado_admin"
+      "status": "aprovado_admin"
     },
     {
       "id": 1774139752041,

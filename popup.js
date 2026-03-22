@@ -294,7 +294,11 @@ function setupEventListeners() {
   document.getElementById('saveUser').addEventListener('click', saveUser);
 
   // Logs tab
-  document.getElementById('logFilter').addEventListener('change', (e) => loadLogs(e.target.value));
+  document.getElementById('logFilter').addEventListener('change', () => showLogsIdleState());
+  document.getElementById('loadRecentLogs').addEventListener('click', () => {
+    const filter = document.getElementById('logFilter').value || 'all';
+    loadLogs(filter, 10);
+  });
   document.getElementById('exportLogs').addEventListener('click', exportLogs);
 
   // Config tab
@@ -386,7 +390,7 @@ function switchTab(tabId) {
 
   // Load specific tab data
   if (tabId === 'rastreio') loadNavigationHistory();
-  if (tabId === 'logs') loadLogs();
+  if (tabId === 'logs') showLogsIdleState();
   if (tabId === 'solicitacoes') loadReleaseRequests();
   if (tabId === 'config' || tabId === 'avisos') loadConfigData();
 }
@@ -416,7 +420,7 @@ function loadAdminData() {
     }
   });
 
-  loadLogs();
+  showLogsIdleState();
   loadStats();
 }
 
@@ -589,13 +593,23 @@ function saveUser() {
   });
 }
 
+function showLogsIdleState() {
+  const logDisplay = document.getElementById('logDisplay');
+  if (!logDisplay) return;
+  logDisplay.innerHTML = '<div class="log-entry">Clique em "Carregar 10 Ultimos Logs" para buscar os eventos.</div>';
+}
+
 // Load logs
-function loadLogs(filter = 'all') {
-  requestActivityLogs({ filter, limit: 5000 }, (filteredLogs) => {
+function loadLogs(filter = 'all', limit = 10) {
+  requestActivityLogs({ filter, limit }, (filteredLogs) => {
     const logDisplay = document.getElementById('logDisplay');
-    logDisplay.innerHTML = filteredLogs.slice(-100).reverse().map(log => `
+    if (!filteredLogs.length) {
+      logDisplay.innerHTML = '<div class="log-entry">Nenhum log encontrado para o filtro selecionado.</div>';
+      return;
+    }
+    logDisplay.innerHTML = filteredLogs.map(log => `
       <div class="log-entry">
-        [${new Date(log.timestamp).toLocaleString('pt-BR')}] ${log.browserUser || log.windowsUser || 'Unknown'}: ${log.action} - ${JSON.stringify(log.details).substring(0, 100)}
+        [${new Date(log.timestamp).toLocaleString('pt-BR')}] ${log.browserUser || log.windowsUser}: ${log.action} - ${JSON.stringify(log.details).substring(0, 100)}
       </div>
     `).join('');
   });

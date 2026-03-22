@@ -1,4 +1,4 @@
 @echo off
 setlocal
 set "SCRIPT_DIR=%~dp0"
-node "%SCRIPT_DIR%host.js"
+"%SCRIPT_DIR%organife-native-host.exe"

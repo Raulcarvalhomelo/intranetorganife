@@ -60,6 +60,22 @@
       border-color: #3b82f6;
       box-shadow: 0 0 0 3px rgba(59, 130, 246, .2);
     }
+    .value {
+      width: 100%;
+      border: 1px solid #475569;
+      background: #020617;
+      color: #f8fafc;
+      border-radius: 0.625rem;
+      padding: 0.75rem;
+      font-size: 1rem;
+      margin-bottom: 0.75rem;
+      min-height: 2.875rem;
+      display: flex;
+      align-items: center;
+    }
+    .hidden {
+      display: none;
+    }
     button {
       width: 100%;
       border: 0;
@@ -113,9 +129,10 @@
 <body>
   <main class="card">
     <h1>Informe seu nome</h1>
-    <p>Para usar o navegador, preencha o nome do usuário. Esse campo é obrigatório.</p>
+    <p>Para usar o navegador, confirme os dados do usuário e selecione o departamento.</p>
     <label for="userName">Nome do usuário</label>
-    <input id="userName" type="text" autocomplete="name" placeholder="Digite seu nome" />
+    <div id="userNameValue" class="value">Carregando usuário do Windows...</div>
+    <input id="userName" class="hidden" type="text" autocomplete="name" placeholder="Digite seu nome" />
     <label for="userDepartment">Departamento</label>
     <select id="userDepartment">
       <option value="">Selecione um departamento</option>
@@ -127,7 +144,7 @@
       <option value="Administrativo">Administrativo</option>
     </select>
     <button id="saveUser">Continuar</button>
-    <div id="error" class="error">Informe um nome e departamento válidos para continuar.</div>
+    <div id="error" class="error">Informe um nome de usuário e departamento válidos para continuar.</div>
   </main>
   <script src="identity.js"></script>
 </body>

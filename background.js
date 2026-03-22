@@ -24,6 +24,7 @@ const LOGS_STORE_NAME = 'activityLogs';
 const KANBAN_REALTIME_DELTA_KEY = 'kanbanRealtimeDelta';
 const LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const LOG_CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
+const BRASILIA_HOUR_CACHE_MS = 30 * 60 * 1000;
 let browserUserLoaded = false;
 let logsDbPromise = null;
 let lastLogsCleanupAt = 0;
@@ -37,6 +38,11 @@ let tempAllowedLinksCompiled = EMPTY_COMPILED_PATTERNS;
 const NAVIGATION_DEDUPE_WINDOW_MS = 700;
 const NAVIGATION_DEDUPE_MAX_ENTRIES = 2000;
 const recentNavigationChecks = new Map();
+let cachedWindowsUser = '';
+let hasResolvedWindowsUser = false;
+let windowsUserResolvePromise = null;
+let cachedBrasiliaHour = null;
+let cachedBrasiliaExpiresAt = 0;
 
 function normalizeServerUrl(rawUrl) {
   const value = String(rawUrl || '').trim();
@@ -392,22 +398,73 @@ async function readActivityLogs({ action = 'all', sinceMs = 0, limit = 5000 } = 
       .sort((a, b) => (Number(b.timestampMs) || 0) - (Number(a.timestampMs) || 0))
       .slice(0, normalizedLimit);
   }
-  const logs = await new Promise((resolve) => {
+  return new Promise((resolve) => {
     const transaction = db.transaction(LOGS_STORE_NAME, 'readonly');
     const store = transaction.objectStore(LOGS_STORE_NAME);
-    const request = store.getAll();
-    request.onsuccess = () => resolve(Array.isArray(request.result) ? request.result : []);
-    request.onerror = () => resolve([]);
-  });
-  return logs
-    .filter((entry) => {
-      if (!entry) return false;
-      if (normalizedAction !== 'all' && String(entry.action || '').toLowerCase() !== normalizedAction) return false;
+    let index = null;
+    try {
+      index = store.index('by_timestamp_ms');
+    } catch {
+      index = null;
+    }
+    if (!index) {
+      const request = store.getAll();
+      request.onsuccess = () => {
+        const allLogs = Array.isArray(request.result) ? request.result : [];
+        const filtered = allLogs
+          .filter((entry) => {
+            if (!entry) return false;
+            if (normalizedAction !== 'all' && String(entry.action || '').toLowerCase() !== normalizedAction) return false;
+            const ms = Number(entry.timestampMs) || new Date(entry.timestamp).getTime() || 0;
+            return ms >= normalizedSince;
+          })
+          .sort((a, b) => (Number(b.timestampMs) || 0) - (Number(a.timestampMs) || 0))
+          .slice(0, normalizedLimit);
+        resolve(filtered);
+      };
+      request.onerror = () => resolve([]);
+      return;
+    }
+    const collected = [];
+    let settled = false;
+    const settle = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    const cursorRequest = index.openCursor(null, 'prev');
+    cursorRequest.onsuccess = (event) => {
+      const cursor = event.target.result;
+      if (!cursor) {
+        settle(collected);
+        return;
+      }
+      const entry = cursor.value;
+      if (!entry) {
+        cursor.continue();
+        return;
+      }
       const ms = Number(entry.timestampMs) || new Date(entry.timestamp).getTime() || 0;
-      return ms >= normalizedSince;
-    })
-    .sort((a, b) => (Number(b.timestampMs) || 0) - (Number(a.timestampMs) || 0))
-    .slice(0, normalizedLimit);
+      if (ms < normalizedSince) {
+        settle(collected);
+        return;
+      }
+      if (normalizedAction !== 'all' && String(entry.action || '').toLowerCase() !== normalizedAction) {
+        cursor.continue();
+        return;
+      }
+      collected.push(entry);
+      if (collected.length >= normalizedLimit) {
+        settle(collected);
+        return;
+      }
+      cursor.continue();
+    };
+    cursorRequest.onerror = () => settle([]);
+    transaction.onabort = () => settle([]);
+    transaction.onerror = () => settle([]);
+    transaction.oncomplete = () => settle(collected);
+  });
 }
 
 async function clearAllActivityLogs() {
@@ -532,9 +589,14 @@ browserAPI.runtime.onInstalled.addListener(() => {
 async function logActivity(action, details) {
   const windowsUsername = await getWindowsUsername();
   const timestamp = new Date();
+  const normalizedBrowserUser = String(browserUser || '').trim();
+  const normalizedWindowsUser = String(windowsUsername || '').trim();
+  const resolvedWindowsUser = (normalizedWindowsUser && normalizedWindowsUser !== 'unknown-user')
+    ? normalizedWindowsUser
+    : (normalizedBrowserUser || normalizedWindowsUser);
   const log = {
     id: `${timestamp.getTime()}-${Math.random().toString(36).slice(2, 10)}`,
-    windowsUser: windowsUsername,
+    windowsUser: resolvedWindowsUser,
     browserUser: browserUser,
     timestamp: timestamp.toISOString(),
     timestampMs: timestamp.getTime(),
@@ -550,15 +612,25 @@ async function logActivity(action, details) {
 
 // Get Windows username
 async function getWindowsUsername() {
-  try {
-    if (browserAPI.system && browserAPI.system.display) {
-      const info = await browserAPI.system.display.getInfo();
-      return info[0]?.name || 'unknown-user';
-    }
-    return 'unknown-user';
-  } catch (error) {
-    return 'unknown-user';
+  if (hasResolvedWindowsUser) {
+    return cachedWindowsUser || 'unknown-user';
   }
+  if (!windowsUserResolvePromise) {
+    windowsUserResolvePromise = (async () => {
+      const nativeResult = await getNativeWindowsUser();
+      if (nativeResult && nativeResult.ok) {
+        const displayName = String(nativeResult.displayName || '').trim();
+        const userName = String(nativeResult.userName || '').trim();
+        cachedWindowsUser = displayName || userName || 'unknown-user';
+      } else {
+        cachedWindowsUser = 'unknown-user';
+      }
+      hasResolvedWindowsUser = true;
+      windowsUserResolvePromise = null;
+      return cachedWindowsUser;
+    })();
+  }
+  return windowsUserResolvePromise;
 }
 
 function getHost(input) {
@@ -665,8 +737,19 @@ function getBrasiliaHour() {
   }
 }
 
-function isBrasiliaFreeWindow() {
+function getBrasiliaHourCached() {
+  const now = Date.now();
+  if (cachedBrasiliaHour !== null && now < cachedBrasiliaExpiresAt) {
+    return cachedBrasiliaHour;
+  }
   const hour = getBrasiliaHour();
+  cachedBrasiliaHour = hour;
+  cachedBrasiliaExpiresAt = now + BRASILIA_HOUR_CACHE_MS;
+  return hour;
+}
+
+function isBrasiliaFreeWindow() {
+  const hour = typeof getBrasiliaHourCached === 'function' ? getBrasiliaHourCached() : getBrasiliaHour();
   return hour === 12;
 }
 
@@ -870,6 +953,27 @@ async function openNativeFileAttachment(request) {
     allowedExtensions
   };
   return sendNativeMessageAsync(nativeFilePickerHostName, payload);
+}
+
+async function getNativeWindowsUser() {
+  const payload = { action: 'getWindowsUser' };
+  const result = await sendNativeMessageAsync(nativeFilePickerHostName, payload);
+  if (!result || !result.ok) {
+    return result;
+  }
+  const userName = String((result.userName || result.username || '')).trim();
+  const userDomain = String((result.userDomain || result.domain || '')).trim();
+  const displayNameRaw = String(result.displayName || '').trim();
+  const displayName = displayNameRaw || (userDomain && userName ? `${userDomain}\\${userName}` : userName);
+  if (!userName && !displayName) {
+    return { ok: false, code: 'WINDOWS_USER_EMPTY', message: 'windows-user-vazio' };
+  }
+  return {
+    ok: true,
+    userName: userName || displayName,
+    userDomain,
+    displayName: displayName || userName
+  };
 }
 
 function isRequestAuthorized(request, allowedRoles = ['admin']) {
@@ -1140,6 +1244,16 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
           ok: false,
           code: 'NATIVE_OPEN_FAILED',
           message: String(error && error.message ? error.message : 'falha-ao-abrir-arquivo')
+        }));
+      return true;
+
+    case 'getWindowsUser':
+      getNativeWindowsUser()
+        .then((result) => sendResponse(result))
+        .catch((error) => sendResponse({
+          ok: false,
+          code: 'WINDOWS_USER_ERROR',
+          message: String(error && error.message ? error.message : 'falha-ao-obter-usuario-windows')
         }));
       return true;
   }
