@@ -438,17 +438,24 @@ function saveBlockedSites() {
   loadStats();
 }
 
+function requestActivityLogs(options = {}, callback = () => {}) {
+  const payload = {
+    type: 'getActivityLogs',
+    filter: options.filter || 'all',
+    sinceMs: Number(options.sinceMs) || 0,
+    limit: Number(options.limit) || 5000
+  };
+  browserAPI.runtime.sendMessage(payload, (response) => {
+    const logs = Array.isArray(response && response.logs) ? response.logs : [];
+    callback(logs);
+  });
+}
+
 // Load navigation history
 function loadNavigationHistory() {
-  browserAPI.storage.local.get(['activityLogs'], (result) => {
-    const logs = result.activityLogs || [];
-    const navigationLogs = logs.filter(log => log.action === 'navigation');
-    
-    // Filter last 72 hours
-    const cutoff = Date.now() - 72 * 60 * 60 * 1000;
-    const recentLogs = navigationLogs.filter(log => new Date(log.timestamp).getTime() > cutoff);
-    
-    renderNavigationHistory(recentLogs);
+  const cutoff = Date.now() - 72 * 60 * 60 * 1000;
+  requestActivityLogs({ filter: 'navigation', sinceMs: cutoff, limit: 5000 }, (logs) => {
+    renderNavigationHistory(logs);
   });
 }
 
@@ -556,9 +563,14 @@ function exportCSV() {
 
 function clearLogs() {
   if (confirm('Tem certeza que deseja limpar todo o historico?')) {
-    browserAPI.storage.local.set({ activityLogs: [] }, () => {
-      loadNavigationHistory();
-      alert('Historico limpo com sucesso');
+    browserAPI.runtime.sendMessage({ type: 'clearActivityLogs' }, (response) => {
+      if (response && response.success) {
+        loadNavigationHistory();
+        loadLogs();
+        alert('Historico limpo com sucesso');
+        return;
+      }
+      alert('Nao foi possivel limpar o historico');
     });
   }
 }
@@ -579,12 +591,7 @@ function saveUser() {
 
 // Load logs
 function loadLogs(filter = 'all') {
-  browserAPI.storage.local.get(['activityLogs'], (result) => {
-    const logs = result.activityLogs || [];
-    const filteredLogs = filter === 'all' 
-      ? logs 
-      : logs.filter(log => log.action === filter);
-
+  requestActivityLogs({ filter, limit: 5000 }, (filteredLogs) => {
     const logDisplay = document.getElementById('logDisplay');
     logDisplay.innerHTML = filteredLogs.slice(-100).reverse().map(log => `
       <div class="log-entry">
@@ -595,8 +602,7 @@ function loadLogs(filter = 'all') {
 }
 
 function exportLogs() {
-  browserAPI.storage.local.get(['activityLogs'], (result) => {
-    const logs = result.activityLogs || [];
+  requestActivityLogs({ filter: 'all', limit: 20000 }, (logs) => {
     const blob = new Blob([JSON.stringify(logs, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

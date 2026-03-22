@@ -13,7 +13,7 @@
     "quickLinks": [
       {
         "name": "t",
-        "url": "https://original.com.brsa"
+        "url": "https://original.com.br"
       },
       {
         "name": "AS",
@@ -29,13 +29,16 @@
       }
     ],
     "blockedKeywords": [],
-    "blockedSites": [],
+    "blockedSites": [
+      "*.worldofwarships.com"
+    ],
     "allowedLinks": [],
     "allowedDomains": [
       "*.extensions",
       "*.web.whatsapp.com",
       "*.booking.com",
-      "*.fitgirl-repacks.site"
+      "*.fitgirl-repacks.site",
+      "*.original.com.br"
     ],
     "tempAllowedLinks": [
       "*.newtab",
@@ -45,6 +48,28 @@
     "browserUser": ""
   },
   "releaseRequests": [
+    {
+      "id": 1774139752041,
+      "clientRequestId": "1774139752025-d8038fa0bdf68",
+      "domain": "*.worldofwarships.com",
+      "reason": "s",
+      "user": "we",
+      "browser": "Edge",
+      "originalUrl": "https://worldofwarships.com/sign-up/?t=1&pub_id=6808&xid=69b75b61272c2c0001b65748&xid_param1=gx-br-wargaming-worldofwarships-sd&xid_param_2=&sid=SIDFLHe7gTxKT-Z5W84GQwbuxTjQM3yszCGx6j8fBKatbgTnx2yczffl4NdnuYdumiPELWWTFSJp1GNwGbQRmioIkQEgFBI82owR3r-n4SWqX392HHvLywb50LMyNh-lNCYHnd69oNHRisWEQ&enctid=dh3tajqszdh2&lpsn=WOWS+LP+Portal+URL+for+SEM-brand+sign-up&foris=1&teclient=1772927078809982285&utm_source=wlap&utm_medium=affiliate&utm_campaign=y5txyfd3&utm_content=6808",
+      "timestamp": "2026-03-22T00:35:52.025Z",
+      "status": "bloqueado_admin"
+    },
+    {
+      "id": 1774139721773,
+      "clientRequestId": "1774139721770-b8633d3f4b5ab8",
+      "domain": "*.original.com.brsa",
+      "reason": "dffdsf",
+      "user": "we",
+      "browser": "Edge",
+      "originalUrl": "https://original.com.brsa/",
+      "timestamp": "2026-03-22T00:35:21.770Z",
+      "status": "aprovado_admin"
+    },
     {
       "id": 1774028406342,
       "clientRequestId": "1774028406338-bb2301a384f4f8",

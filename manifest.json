@@ -40,12 +40,6 @@
     "48": "icons/icon16.png",
     "128": "icons/icon16.png"
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"]
-    }
-  ],
   "chrome_url_overrides": {
     "newtab": "intranet.html"
   },

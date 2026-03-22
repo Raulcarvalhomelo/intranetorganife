@@ -18,7 +18,14 @@ let quickLinks = [];
 let currentSettings = {};
 const EXEMPT_BROWSER_USER = 'diretoria';
 const nativeFilePickerHostName = 'com.organife.filepicker';
+const LOGS_DB_NAME = 'organife-extension-db';
+const LOGS_DB_VERSION = 1;
+const LOGS_STORE_NAME = 'activityLogs';
+const LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const LOG_CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
 let browserUserLoaded = false;
+let logsDbPromise = null;
+let lastLogsCleanupAt = 0;
 
 function normalizeServerUrl(rawUrl) {
   const value = String(rawUrl || '').trim();
@@ -249,6 +256,166 @@ function loadSettingsFromStorage() {
 
 loadSettingsFromStorage();
 
+function storageLocalGetAsync(keys) {
+  return new Promise((resolve) => {
+    browserAPI.storage.local.get(keys, (result) => resolve(result || {}));
+  });
+}
+
+function storageLocalSetAsync(payload) {
+  return new Promise((resolve) => {
+    browserAPI.storage.local.set(payload || {}, () => resolve());
+  });
+}
+
+function storageLocalRemoveAsync(keys) {
+  return new Promise((resolve) => {
+    browserAPI.storage.local.remove(keys, () => resolve());
+  });
+}
+
+function openLogsDb() {
+  if (logsDbPromise) return logsDbPromise;
+  if (typeof indexedDB === 'undefined') {
+    logsDbPromise = Promise.resolve(null);
+    return logsDbPromise;
+  }
+  logsDbPromise = new Promise((resolve) => {
+    try {
+      const request = indexedDB.open(LOGS_DB_NAME, LOGS_DB_VERSION);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(LOGS_STORE_NAME)) {
+          const store = db.createObjectStore(LOGS_STORE_NAME, { keyPath: 'id' });
+          store.createIndex('by_timestamp_ms', 'timestampMs', { unique: false });
+          store.createIndex('by_action', 'action', { unique: false });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+  return logsDbPromise;
+}
+
+async function clearLegacyActivityLogsFromStorage() {
+  await storageLocalRemoveAsync(['activityLogs']);
+}
+
+async function maybeCleanupActivityLogs(force = false) {
+  const now = Date.now();
+  if (!force && now - lastLogsCleanupAt < LOG_CLEANUP_INTERVAL_MS) return;
+  lastLogsCleanupAt = now;
+  const db = await openLogsDb();
+  const cutoff = now - LOG_RETENTION_MS;
+  if (!db) {
+    const result = await storageLocalGetAsync(['activityLogs']);
+    const logs = Array.isArray(result.activityLogs) ? result.activityLogs : [];
+    const filtered = logs.filter((entry) => {
+      const ms = Number(entry && entry.timestampMs) || new Date(entry && entry.timestamp).getTime() || 0;
+      return ms >= cutoff;
+    });
+    await storageLocalSetAsync({ activityLogs: filtered });
+    return;
+  }
+  await new Promise((resolve) => {
+    const transaction = db.transaction(LOGS_STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(LOGS_STORE_NAME);
+    const cursorRequest = store.openCursor();
+    cursorRequest.onsuccess = (event) => {
+      const cursor = event.target.result;
+      if (!cursor) return;
+      const value = cursor.value || {};
+      const ms = Number(value.timestampMs) || new Date(value.timestamp).getTime() || 0;
+      if (ms > 0 && ms < cutoff) {
+        cursor.delete();
+      }
+      cursor.continue();
+    };
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => resolve();
+    transaction.onabort = () => resolve();
+  });
+}
+
+async function appendActivityLog(log) {
+  const db = await openLogsDb();
+  if (!db) {
+    const result = await storageLocalGetAsync(['activityLogs']);
+    const logs = Array.isArray(result.activityLogs) ? result.activityLogs : [];
+    logs.push(log);
+    await storageLocalSetAsync({ activityLogs: logs.slice(-5000) });
+    await maybeCleanupActivityLogs();
+    return;
+  }
+  await new Promise((resolve) => {
+    const transaction = db.transaction(LOGS_STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(LOGS_STORE_NAME);
+    store.put(log);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => resolve();
+    transaction.onabort = () => resolve();
+  });
+  await maybeCleanupActivityLogs();
+}
+
+async function readActivityLogs({ action = 'all', sinceMs = 0, limit = 5000 } = {}) {
+  const normalizedAction = String(action || 'all').trim().toLowerCase();
+  const normalizedLimit = Math.max(1, Math.min(20000, Number(limit) || 5000));
+  const normalizedSince = Math.max(0, Number(sinceMs) || 0);
+  const db = await openLogsDb();
+  if (!db) {
+    const result = await storageLocalGetAsync(['activityLogs']);
+    const logs = Array.isArray(result.activityLogs) ? result.activityLogs : [];
+    return logs
+      .filter((entry) => {
+        if (!entry) return false;
+        if (normalizedAction !== 'all' && String(entry.action || '').toLowerCase() !== normalizedAction) return false;
+        const ms = Number(entry.timestampMs) || new Date(entry.timestamp).getTime() || 0;
+        return ms >= normalizedSince;
+      })
+      .sort((a, b) => (Number(b.timestampMs) || 0) - (Number(a.timestampMs) || 0))
+      .slice(0, normalizedLimit);
+  }
+  const logs = await new Promise((resolve) => {
+    const transaction = db.transaction(LOGS_STORE_NAME, 'readonly');
+    const store = transaction.objectStore(LOGS_STORE_NAME);
+    const request = store.getAll();
+    request.onsuccess = () => resolve(Array.isArray(request.result) ? request.result : []);
+    request.onerror = () => resolve([]);
+  });
+  return logs
+    .filter((entry) => {
+      if (!entry) return false;
+      if (normalizedAction !== 'all' && String(entry.action || '').toLowerCase() !== normalizedAction) return false;
+      const ms = Number(entry.timestampMs) || new Date(entry.timestamp).getTime() || 0;
+      return ms >= normalizedSince;
+    })
+    .sort((a, b) => (Number(b.timestampMs) || 0) - (Number(a.timestampMs) || 0))
+    .slice(0, normalizedLimit);
+}
+
+async function clearAllActivityLogs() {
+  const db = await openLogsDb();
+  if (!db) {
+    await storageLocalSetAsync({ activityLogs: [] });
+    return;
+  }
+  await new Promise((resolve) => {
+    const transaction = db.transaction(LOGS_STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(LOGS_STORE_NAME);
+    store.clear();
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => resolve();
+    transaction.onabort = () => resolve();
+  });
+}
+
+void clearLegacyActivityLogsFromStorage();
+void maybeCleanupActivityLogs(true);
+
 let settingsEventSource = null;
 let sseRetryTimer = null;
 
@@ -339,21 +506,16 @@ async function logActivity(action, details) {
   const windowsUsername = await getWindowsUsername();
   const timestamp = new Date();
   const log = {
+    id: `${timestamp.getTime()}-${Math.random().toString(36).slice(2, 10)}`,
     windowsUser: windowsUsername,
     browserUser: browserUser,
     timestamp: timestamp.toISOString(),
+    timestampMs: timestamp.getTime(),
     browser: getCurrentBrowserName(),
     action,
     details
   };
-
-  // Store locally (last week)
-  browserAPI.storage.local.get(['activityLogs'], (result) => {
-    let logs = result.activityLogs || [];
-    logs = logs.filter(log => new Date(log.timestamp) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
-    logs.push(log);
-    browserAPI.storage.local.set({ activityLogs: logs });
-  });
+  await appendActivityLog(log);
 
   // Send to server
   return log;
@@ -719,12 +881,38 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     case 'getLogs':
       if (isRequestAuthorized(request, ['admin'])) {
-        browserAPI.storage.local.get(['activityLogs'], (result) => {
-          sendResponse({ logs: result.activityLogs || [] });
+        readActivityLogs({
+          action: request.filter || 'all',
+          sinceMs: Number(request.sinceMs) || 0,
+          limit: Number(request.limit) || 5000
+        }).then((logs) => {
+          sendResponse({ logs });
+        }).catch(() => {
+          sendResponse({ logs: [] });
         });
         return true;
       }
       break;
+
+    case 'getActivityLogs':
+      readActivityLogs({
+        action: request.filter || 'all',
+        sinceMs: Number(request.sinceMs) || 0,
+        limit: Number(request.limit) || 5000
+      }).then((logs) => {
+        sendResponse({ logs });
+      }).catch(() => {
+        sendResponse({ logs: [] });
+      });
+      return true;
+
+    case 'clearActivityLogs':
+      clearAllActivityLogs().then(() => {
+        sendResponse({ success: true });
+      }).catch(() => {
+        sendResponse({ success: false });
+      });
+      return true;
 
     case 'backupSettings':
       if (isRequestAuthorized(request, ['admin'])) {
