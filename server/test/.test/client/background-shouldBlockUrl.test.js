@@ -31,6 +31,11 @@ function buildSandboxedBlockingApi(backgroundJs) {
     'matchesComCountryVariant',
     'singleDomainMatches',
     'domainMatchesPattern',
+    'normalizePatternEntry',
+    'compilePatternMatcherEntry',
+    'buildCompiledPatternList',
+    'rebuildCompiledBlockingPatterns',
+    'matchesCompiledDomainPatterns',
     'normalizeUserName',
     'isExemptBrowserUser',
     'isExtensionPage',
@@ -49,9 +54,14 @@ function buildSandboxedBlockingApi(backgroundJs) {
     let totalBlockMode = false;
     let browserUser = '';
     const EXEMPT_BROWSER_USER = 'diretoria';
+    const EMPTY_COMPILED_PATTERNS = Object.freeze({ rawEntries: [], domainMatchers: [] });
+    let blockedSitesCompiled = EMPTY_COMPILED_PATTERNS;
+    let allowedDomainsCompiled = EMPTY_COMPILED_PATTERNS;
+    let tempAllowedLinksCompiled = EMPTY_COMPILED_PATTERNS;
     let temporaryAllowed = new Map();
     const browserAPI = { runtime: { getURL: () => 'chrome-extension://test/' } };
     ${pieces.join('\n')}
+    rebuildCompiledBlockingPatterns();
     globalThis.__api = {
       shouldBlockUrl,
       singleDomainMatches,
@@ -66,6 +76,7 @@ function buildSandboxedBlockingApi(backgroundJs) {
         if (next.tempAllowedLinks !== undefined) tempAllowedLinks = next.tempAllowedLinks;
         if (next.totalBlockMode !== undefined) totalBlockMode = next.totalBlockMode;
         if (next.browserUser !== undefined) browserUser = next.browserUser;
+        rebuildCompiledBlockingPatterns();
       },
       setTemporary(urlLower, expiresAt) {
         temporaryAllowed.set(String(urlLower || '').toLowerCase(), Number(expiresAt) || 0);
@@ -147,6 +158,45 @@ test('shouldBlockUrl: tempAllowedLinks permite quando não está em blockedSites
   });
 
   assert.equal(api.shouldBlockUrl('https://x.temp.com/'), false);
+});
+
+test('shouldBlockUrl: mantém bloqueio com padrões normalizados e wildcard com ponto e vírgula', async () => {
+  const bgPath = path.resolve(__dirname, '../../../../background.js');
+  const backgroundJs = fs.readFileSync(bgPath, 'utf8');
+  const api = buildSandboxedBlockingApi(backgroundJs);
+
+  api.overrideBrasiliaHour(10);
+  api.setState({
+    blockedSites: ['  *.example.com ; portal.site.com  '],
+    allowedDomains: [],
+    tempAllowedLinks: [],
+    allowedLinks: [],
+    blockedKeywords: [],
+    totalBlockMode: false,
+    browserUser: ''
+  });
+
+  assert.equal(api.shouldBlockUrl('https://sub.example.com/abc'), true);
+  assert.equal(api.shouldBlockUrl('https://portal.site.com/home'), true);
+});
+
+test('shouldBlockUrl: mantém variação de país para domínio .com', async () => {
+  const bgPath = path.resolve(__dirname, '../../../../background.js');
+  const backgroundJs = fs.readFileSync(bgPath, 'utf8');
+  const api = buildSandboxedBlockingApi(backgroundJs);
+
+  api.overrideBrasiliaHour(10);
+  api.setState({
+    blockedSites: ['google.com'],
+    allowedDomains: [],
+    tempAllowedLinks: [],
+    allowedLinks: [],
+    blockedKeywords: [],
+    totalBlockMode: false,
+    browserUser: ''
+  });
+
+  assert.equal(api.shouldBlockUrl('https://google.com.br/search?q=a'), true);
 });
 
 test('shouldBlockUrl: totalBlockMode bloqueia tudo que não foi permitido', async () => {

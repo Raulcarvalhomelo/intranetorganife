@@ -27,6 +27,13 @@ const LOG_CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
 let browserUserLoaded = false;
 let logsDbPromise = null;
 let lastLogsCleanupAt = 0;
+const EMPTY_COMPILED_PATTERNS = Object.freeze({
+  rawEntries: [],
+  domainMatchers: []
+});
+let blockedSitesCompiled = EMPTY_COMPILED_PATTERNS;
+let allowedDomainsCompiled = EMPTY_COMPILED_PATTERNS;
+let tempAllowedLinksCompiled = EMPTY_COMPILED_PATTERNS;
 const NAVIGATION_DEDUPE_WINDOW_MS = 700;
 const NAVIGATION_DEDUPE_MAX_ENTRIES = 2000;
 const recentNavigationChecks = new Map();
@@ -188,6 +195,7 @@ async function loadSettingsFromServer() {
       tempAllowedLinks = Array.isArray(settingsFromJson.tempAllowedLinks)
         ? settingsFromJson.tempAllowedLinks
         : tempAllowedLinks;
+      rebuildCompiledBlockingPatterns();
       const normalizedServerFromSettings = normalizeServerUrl(settingsFromJson.serverUrl);
       if (normalizedServerFromSettings && normalizedServerFromSettings !== serverUrl) {
         serverUrl = normalizedServerFromSettings;
@@ -247,6 +255,7 @@ function loadSettingsFromStorage() {
     if (result.allowedLinks) allowedLinks = result.allowedLinks;
     if (result.allowedDomains) allowedDomains = result.allowedDomains;
     if (result.tempAllowedLinks) tempAllowedLinks = result.tempAllowedLinks;
+    rebuildCompiledBlockingPatterns();
     if (result.totalBlockMode !== undefined) totalBlockMode = result.totalBlockMode;
     browserUser = String(result.browserUser || '').trim();
     if (result.companyName) companyName = result.companyName;
@@ -479,10 +488,15 @@ setupSSE();
 
 browserAPI.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
+  let shouldRebuildPatterns = false;
   if (changes.tempAllowedLinks) tempAllowedLinks = changes.tempAllowedLinks.newValue || [];
+  if (changes.tempAllowedLinks) shouldRebuildPatterns = true;
   if (changes.allowedLinks) allowedLinks = changes.allowedLinks.newValue || [];
   if (changes.allowedDomains) allowedDomains = changes.allowedDomains.newValue || [];
+  if (changes.allowedDomains) shouldRebuildPatterns = true;
   if (changes.blockedSites) blockedSites = changes.blockedSites.newValue || [];
+  if (changes.blockedSites) shouldRebuildPatterns = true;
+  if (shouldRebuildPatterns) rebuildCompiledBlockingPatterns();
   if (changes.blockedKeywords) blockedKeywords = changes.blockedKeywords.newValue || [];
   if (changes.totalBlockMode) totalBlockMode = !!changes.totalBlockMode.newValue;
   if (changes.restrictedPassword) restrictedPassword = String(changes.restrictedPassword.newValue || '').trim();
@@ -589,6 +603,53 @@ function domainMatchesPattern(urlOrDomain, patterns) {
   });
 }
 
+function normalizePatternEntry(value) {
+  return String(value || '').toLowerCase().trim();
+}
+
+function compilePatternMatcherEntry(pattern) {
+  const hostPattern = getHost(pattern);
+  if (!hostPattern) return null;
+  const escaped = hostPattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  return {
+    regex: new RegExp(`^${escaped}$`, 'i'),
+    base: hostPattern.startsWith('*.') ? hostPattern.slice(2) : hostPattern
+  };
+}
+
+function buildCompiledPatternList(sourceList) {
+  if (!Array.isArray(sourceList) || sourceList.length === 0) return EMPTY_COMPILED_PATTERNS;
+  const rawEntries = [];
+  const domainMatchers = [];
+  for (const value of sourceList) {
+    const normalized = normalizePatternEntry(value);
+    if (!normalized) continue;
+    rawEntries.push(normalized);
+    const parts = normalized.split(';').map((item) => item.trim()).filter(Boolean);
+    for (const part of parts) {
+      const matcher = compilePatternMatcherEntry(part);
+      if (matcher) domainMatchers.push(matcher);
+    }
+  }
+  if (!rawEntries.length && !domainMatchers.length) return EMPTY_COMPILED_PATTERNS;
+  return { rawEntries, domainMatchers };
+}
+
+function rebuildCompiledBlockingPatterns() {
+  blockedSitesCompiled = buildCompiledPatternList(blockedSites);
+  allowedDomainsCompiled = buildCompiledPatternList(allowedDomains);
+  tempAllowedLinksCompiled = buildCompiledPatternList(tempAllowedLinks);
+}
+
+function matchesCompiledDomainPatterns(urlOrDomain, compiledSet) {
+  const host = getHost(urlOrDomain);
+  if (!host || !compiledSet || !compiledSet.domainMatchers || !compiledSet.domainMatchers.length) return false;
+  return compiledSet.domainMatchers.some(({ regex, base }) => {
+    if (regex.test(host)) return true;
+    return matchesComCountryVariant(host, base);
+  });
+}
+
 function getBrasiliaHour() {
   try {
     const parts = new Intl.DateTimeFormat('pt-BR', {
@@ -672,28 +733,26 @@ function shouldBlockUrl(url) {
   if (allowedLinks.some(link => urlLower.includes(link.toLowerCase()))) return false;
 
   // Priority: blockedSites must override allowedDomains/tempAllowedLinks
-  for (const pattern of blockedSites) {
-    const p = (pattern || '').toLowerCase().trim();
+  for (const p of blockedSitesCompiled.rawEntries) {
     if (!p) continue;
     if (urlLower.includes(p)) return true;
     if (singleDomainMatches(urlLower, p)) return true;
-    if (domainMatchesPattern(urlLower, p)) return true;
   }
+  if (matchesCompiledDomainPatterns(urlLower, blockedSitesCompiled)) return true;
 
   // Check if URL matches allowedDomains patterns (permanent)
-  for (const domainPattern of allowedDomains) {
+  for (const domainPattern of allowedDomainsCompiled.rawEntries) {
     if (singleDomainMatches(urlLower, domainPattern)) return false;
-    if (domainMatchesPattern(urlLower, domainPattern)) return false;
   }
+  if (matchesCompiledDomainPatterns(urlLower, allowedDomainsCompiled)) return false;
 
   // Check if URL matches tempAllowedLinks (temporary, pending admin approval)
-  for (const pattern of tempAllowedLinks) {
-    const p = (pattern || '').toLowerCase().trim();
+  for (const p of tempAllowedLinksCompiled.rawEntries) {
     if (!p) continue;
     if (urlLower.includes(p)) return false;
     if (singleDomainMatches(urlLower, p)) return false;
-    if (domainMatchesPattern(urlLower, p)) return false;
   }
+  if (matchesCompiledDomainPatterns(urlLower, tempAllowedLinksCompiled)) return false;
 
   // If totalBlockMode is enabled, block everything not allowed
   if (totalBlockMode) return true;
@@ -717,6 +776,7 @@ function applySettingsFromDashboard(settings) {
   allowedLinks = normalizeArray(settings.allowedLinks);
   allowedDomains = normalizeArray(settings.allowedDomains);
   tempAllowedLinks = normalizeArray(settings.tempAllowedLinks);
+  rebuildCompiledBlockingPatterns();
   totalBlockMode = !!settings.totalBlockMode;
   browserUser = settings.browserUser || browserUser;
   companyName = settings.companyName || companyName;
@@ -873,6 +933,7 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'updateBlockedSites':
       if (isRequestAuthorized(request, ['admin', 'restricted'])) {
         blockedSites = request.sites;
+        rebuildCompiledBlockingPatterns();
         browserAPI.storage.local.set({ blockedSites });
         sendResponse({ success: true });
       }
@@ -897,6 +958,7 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'updateAllowedDomains':
       if (isRequestAuthorized(request, ['admin', 'restricted'])) {
         allowedDomains = request.domains;
+        rebuildCompiledBlockingPatterns();
         browserAPI.storage.local.set({ allowedDomains });
         sendResponse({ success: true });
       }
@@ -905,6 +967,7 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'updateTempAllowedLinks':
       if (isRequestAuthorized(request, ['admin', 'restricted'])) {
         tempAllowedLinks = request.links;
+        rebuildCompiledBlockingPatterns();
         browserAPI.storage.local.set({ tempAllowedLinks });
         sendResponse({ success: true });
       }
@@ -1007,6 +1070,7 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
         allowedLinks = settings.allowedLinks || [];
         allowedDomains = settings.allowedDomains || [];
         tempAllowedLinks = settings.tempAllowedLinks || [];
+        rebuildCompiledBlockingPatterns();
         totalBlockMode = !!settings.totalBlockMode;
         browserUser = settings.browserUser || '';
         companyNotice = String(settings.companyNotice || '').trim();
