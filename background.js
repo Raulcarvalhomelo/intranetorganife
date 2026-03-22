@@ -21,6 +21,7 @@ const nativeFilePickerHostName = 'com.organife.filepicker';
 const LOGS_DB_NAME = 'organife-extension-db';
 const LOGS_DB_VERSION = 1;
 const LOGS_STORE_NAME = 'activityLogs';
+const KANBAN_REALTIME_DELTA_KEY = 'kanbanRealtimeDelta';
 const LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const LOG_CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
 let browserUserLoaded = false;
@@ -440,6 +441,15 @@ function setupSSE() {
         payload = JSON.parse(String(event.data || '{}'));
       } catch {}
       if (!payload || !payload.updated) return;
+      if (String(payload.kind || '').toLowerCase() === 'kanban' && String(payload.channel || '').toLowerCase() === 'kanban') {
+        await storageLocalSetAsync({
+          [KANBAN_REALTIME_DELTA_KEY]: {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            payload
+          }
+        });
+        return;
+      }
       await loadSettingsFromServer();
     };
     settingsEventSource.onerror = () => {

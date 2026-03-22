@@ -30,15 +30,16 @@
     ],
     "blockedKeywords": [],
     "blockedSites": [
-      "*.worldofwarships.com"
+      "*.worldofwarships.com",
+      "*.original.com.br",
+      "*.bing.com"
     ],
     "allowedLinks": [],
     "allowedDomains": [
       "*.extensions",
       "*.web.whatsapp.com",
       "*.booking.com",
-      "*.fitgirl-repacks.site",
-      "*.original.com.br"
+      "*.fitgirl-repacks.site"
     ],
     "tempAllowedLinks": [
       "*.newtab",
@@ -48,6 +49,28 @@
     "browserUser": ""
   },
   "releaseRequests": [
+    {
+      "id": 1774142947867,
+      "clientRequestId": "1774142947863-a86b813b74423",
+      "domain": "*.original.com.br",
+      "reason": "rere",
+      "user": "s",
+      "browser": "Edge",
+      "originalUrl": "https://original.com.br/",
+      "timestamp": "2026-03-22T01:29:07.863Z",
+      "status": "bloqueado_admin"
+    },
+    {
+      "id": 1774142548206,
+      "clientRequestId": "1774142548202-48a8d467e00fa",
+      "domain": "*.bing.com",
+      "reason": "sdasdasd",
+      "user": "test",
+      "browser": "Edge",
+      "originalUrl": "https://www.bing.com/search?q=*.worldofwarships.com&cvid=802ddd865ecd4823bf6621649b965ba2&gs_lcrp=EgRlZGdlKgYIABBFGDkyBggAEEUYOTIGCAEQABhAMgYIAhAAGEAyBggDEAAYQDIGCAQQABhAMgYIBRAAGEAyBggGEAAYQDIGCAcQABhAMgYICBAAGEDSAQc2MjdqMGoxqAIAsAIA&FORM=ANAB01&PC=U531",
+      "timestamp": "2026-03-22T01:22:28.202Z",
+      "status": "bloqueado_admin"
+    },
     {
       "id": 1774139752041,
       "clientRequestId": "1774139752025-d8038fa0bdf68",
@@ -68,7 +91,7 @@
       "browser": "Edge",
       "originalUrl": "https://original.com.brsa/",
       "timestamp": "2026-03-22T00:35:21.770Z",
-      "status": "aprovado_admin"
+      "status": "bloqueado_admin"
     },
     {
       "id": 1774028406342,

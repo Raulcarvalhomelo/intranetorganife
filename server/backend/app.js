@@ -41,10 +41,45 @@ let kanbanDbFlushQueued = false;
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 
-function emitUpdate(kind = 'all') {
-  const payload = `data: ${JSON.stringify({ updated: true, kind, at: new Date().toISOString() })}\n\n`;
+function emitUpdate(kind = 'all', extra = null) {
+  const basePayload = { updated: true, kind, at: new Date().toISOString() };
+  const mergedPayload = extra && typeof extra === 'object'
+    ? { ...basePayload, ...extra }
+    : basePayload;
+  const payload = `data: ${JSON.stringify(mergedPayload)}\n\n`;
   sseClients.forEach((res) => res.write(payload));
   dashboardSseClients.forEach((res) => res.write(payload));
+}
+
+function parseJsonSafe(value, fallback) {
+  try {
+    return JSON.parse(String(value || ''));
+  } catch {
+    return fallback;
+  }
+}
+
+function buildKanbanSseCard(card) {
+  const departments = Array.isArray(card && card.departments)
+    ? card.departments.map((entry) => normalizeKanbanText(entry && entry.label ? entry.label : '', 80)).filter(Boolean)
+    : [];
+  return {
+    id: normalizeKanbanText(card && card.id ? card.id : '', 120),
+    title: normalizeKanbanText(card && card.title ? card.title : '', 200),
+    description: normalizeKanbanText(card && card.description ? card.description : '', 2000),
+    status: normalizeKanbanText(card && card.status ? card.status : '', 20).toLowerCase() || 'todo',
+    priority: normalizeKanbanText(card && card.priority ? card.priority : '', 20).toLowerCase() || 'med',
+    due_at: Number(card && card.dueAt) || 0,
+    tags: Array.isArray(parseJsonSafe(card && card.tagsJson, [])) ? parseJsonSafe(card && card.tagsJson, []) : [],
+    attachments: Array.isArray(parseJsonSafe(card && card.attachmentsJson, [])) ? parseJsonSafe(card && card.attachmentsJson, []) : [],
+    sprint_id: normalizeKanbanText(card && card.sprintId ? card.sprintId : '', 80),
+    recurrence: parseJsonSafe(card && card.recurrenceJson, { type: 'none', lastTrigger: 0 }),
+    created_at: Number(card && card.createdAt) || Date.now(),
+    updated_at: Number(card && card.updatedAt) || Date.now(),
+    deleted: Number(card && card.deleted) ? 1 : 0,
+    departments,
+    department: departments[0] || ''
+  };
 }
 
 function uniq(arr) {
@@ -1086,6 +1121,11 @@ app.post('/api/kanban/card', async (req, res) => {
       return res.status(400).json({ message: 'departamento-obrigatorio' });
     }
     await upsertKanbanCard(card);
+    emitUpdate('kanban', {
+      channel: 'kanban',
+      action: card.deleted ? 'delete' : 'upsert',
+      card: buildKanbanSseCard(card)
+    });
     return res.status(201).json({ saved: true, id: card.id, updated_at: card.updatedAt });
   } catch {
     return res.status(500).json({ message: 'erro-ao-salvar-card' });
@@ -1098,6 +1138,7 @@ app.post('/api/kanban/cards/batch', async (req, res) => {
     return res.status(400).json({ message: 'cards-obrigatorio' });
   }
   const results = [];
+  const updatedCards = [];
   try {
     for (const item of source) {
       const card = normalizeKanbanCardInput(item, Date.now());
@@ -1105,6 +1146,14 @@ app.post('/api/kanban/cards/batch', async (req, res) => {
       if (!card.deleted && !card.departments.length) continue;
       await upsertKanbanCard(card);
       results.push({ id: card.id, updated_at: card.updatedAt });
+      updatedCards.push(buildKanbanSseCard(card));
+    }
+    if (updatedCards.length) {
+      emitUpdate('kanban', {
+        channel: 'kanban',
+        action: 'batch',
+        cards: updatedCards
+      });
     }
     return res.status(201).json({ saved: true, count: results.length, cards: results });
   } catch {

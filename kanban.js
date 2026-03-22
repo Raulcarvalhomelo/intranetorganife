@@ -1,6 +1,7 @@
 const browserAPI = (typeof browser !== 'undefined' ? browser : chrome);
 const THEME_STORAGE_KEY = 'themeMode';
 const KANBAN_SHOW_BACKLOG_KEY = 'kanbanShowBacklog';
+const KANBAN_REALTIME_DELTA_KEY = 'kanbanRealtimeDelta';
 
 function normalizeThemeMode(value) {
   return String(value || '').trim().toLowerCase() === 'dark' ? 'dark' : 'light';
@@ -430,6 +431,83 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch {
       queuePendingCardChange(payload);
     }
+  }
+
+  function toNumberOrZero(value) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : 0;
+  }
+
+  function normalizeRealtimeCard(cardInput) {
+    if (!cardInput || typeof cardInput !== 'object') return null;
+    const incomingUpdatedAt = toNumberOrZero(cardInput.updated_at ?? cardInput.updatedAt) || Date.now();
+    const incomingCreatedAt = toNumberOrZero(cardInput.created_at ?? cardInput.createdAt) || incomingUpdatedAt;
+    const normalizedList = normalizeTodoList([{
+      ...cardInput,
+      text: cardInput.title || cardInput.text || '',
+      dueAt: cardInput.due_at ?? cardInput.dueAt,
+      sprintId: cardInput.sprint_id ?? cardInput.sprintId,
+      updatedAt: incomingUpdatedAt,
+      createdAt: incomingCreatedAt,
+      recurrence: cardInput.recurrence && typeof cardInput.recurrence === 'object'
+        ? cardInput.recurrence
+        : { type: 'none', lastTrigger: 0 },
+      isBacklog: String(cardInput.status || '').toLowerCase() === 'backlog'
+    }]);
+    return normalizedList[0] || null;
+  }
+
+  function applyRealtimeKanbanDelta(deltaEnvelope) {
+    const delta = deltaEnvelope && typeof deltaEnvelope === 'object' && deltaEnvelope.payload
+      ? deltaEnvelope.payload
+      : deltaEnvelope;
+    if (!delta || typeof delta !== 'object') return;
+    const cards = [];
+    if (Array.isArray(delta.cards)) {
+      delta.cards.forEach((card) => cards.push(card));
+    } else if (delta.card && typeof delta.card === 'object') {
+      cards.push(delta.card);
+    }
+    if (!cards.length) return;
+
+    let nextTodos = [...todosState];
+    let hasChanges = false;
+
+    cards.forEach((incomingCard) => {
+      const incomingId = sanitizePlainText(incomingCard && incomingCard.id ? incomingCard.id : '', 80);
+      if (!incomingId) return;
+      const incomingUpdatedAt = toNumberOrZero(incomingCard.updated_at ?? incomingCard.updatedAt);
+      const existingIndex = nextTodos.findIndex((todo) => todo.id === incomingId);
+      const existingUpdatedAt = existingIndex >= 0 ? (Number(nextTodos[existingIndex].updatedAt) || 0) : 0;
+      if (existingIndex >= 0 && incomingUpdatedAt > 0 && incomingUpdatedAt <= existingUpdatedAt) return;
+      const isDeleted = Number(incomingCard.deleted) === 1 || String(incomingCard.deleted).toLowerCase() === 'true';
+      if (isDeleted) {
+        if (existingIndex >= 0) {
+          nextTodos.splice(existingIndex, 1);
+          hasChanges = true;
+        }
+        return;
+      }
+      const normalizedCard = normalizeRealtimeCard(incomingCard);
+      if (!normalizedCard) return;
+      const belongsToActiveDepartment = isTodoInActiveDepartment(normalizedCard);
+      if (!belongsToActiveDepartment && existingIndex < 0) return;
+      if (!belongsToActiveDepartment && existingIndex >= 0) {
+        nextTodos.splice(existingIndex, 1);
+        hasChanges = true;
+        return;
+      }
+      if (existingIndex >= 0) {
+        nextTodos[existingIndex] = normalizedCard;
+        hasChanges = true;
+        return;
+      }
+      nextTodos.push(normalizedCard);
+      hasChanges = true;
+    });
+
+    if (!hasChanges) return;
+    saveTodos(nextTodos, { skipRender: false });
   }
 
   function checkRecurrences() {
@@ -1287,6 +1365,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (changes.themeMode) {
       applyTheme(changes.themeMode.newValue);
+    }
+    if (changes[KANBAN_REALTIME_DELTA_KEY]) {
+      applyRealtimeKanbanDelta(changes[KANBAN_REALTIME_DELTA_KEY].newValue);
     }
   });
 
