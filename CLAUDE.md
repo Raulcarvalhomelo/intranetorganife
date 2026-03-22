@@ -341,6 +341,171 @@ Before creating tests, inform:
   2. explain the root cause
   3. determine whether the issue is in the code or the test
   4. wait for confirmation before modifying the test
+## 11. BLOCKING ENGINE RULES
+
+### 11.1 CORE FUNCTION: shouldBlockUrl
+
+The system uses a hierarchical evaluation to determine whether a URL must be blocked.
+The order of evaluation is critical and must never be changed.
+
+---
+
+### 11.2 HIGHEST PRIORITY EXCEPTIONS
+
+Before applying any blocking rule, the system must check the following conditions.
+If any of them is true, the URL must be allowed immediately.
+
+1. Extension pages
+
+* URLs starting with `chrome-extension://` must never be blocked
+
+2. Exempt user (Diretoria)
+
+* If `browserUser === "diretoria"` (case-sensitive), blocking must be completely bypassed
+
+3. Brasília free window
+
+* System must check timezone `America/Sao_Paulo`
+* If current hour is 12 (12:00–12:59), all navigation must be allowed
+
+---
+
+### 11.3 AUTOMATIC UNBLOCKING RULES
+
+The system allows automatic access in specific scenarios:
+
+#### Brasília free window
+
+* Trigger: current time in São Paulo timezone
+* Behavior: during hour 12, `shouldBlockUrl` must return false
+* Purpose: allow unrestricted usage during lunch time
+
+---
+
+### 11.4 ADMIN DOMAIN ACTIONS
+
+When a release request is processed, the system must apply the following rules:
+
+#### APPROVE
+
+* Remove domain from `tempAllowedLinks`
+* Add domain to `allowedDomains`
+* Persist changes
+* Domain becomes permanently allowed
+
+#### BLOCK
+
+* Remove domain from `tempAllowedLinks`
+* Add domain to `blockedSites`
+* Blocking must take priority over allowedDomains
+
+---
+
+### 11.5 PRIORITY RULE
+
+Blocking precedence must always follow:
+
+1. blockedSites (highest priority)
+2. allowedDomains
+3. tempAllowedLinks
+
+If a domain exists in both blockedSites and allowedDomains:
+
+* It must be BLOCKED
+
+---
+
+### 11.6 TEMPORARY ALLOW (tempAllowedLinks)
+
+#### Behavior on request
+
+* When user requests access, domain is added to `tempAllowedLinks`
+* Access must be granted immediately after request
+* No admin approval is required for temporary access
+
+#### Expiration
+
+* No automatic expiration
+* Only removed when admin performs approve or block
+
+---
+
+### 11.7 MATCHING RULES
+
+The system must support the following matching strategies:
+
+1. String include
+
+* URL contains pattern
+* Example: "google" matches "google.com"
+
+2. Domain match
+
+* Matches exact domain and subdomains
+* Example: "site.com" matches "site.com" and "blog.site.com"
+
+3. Pattern match
+
+* Supports wildcards (*)
+* Example: "*.gov" matches all government domains
+
+---
+
+### 11.8 COUNTRY VARIANT MATCHING
+
+* The system must detect country variations automatically
+* Example:
+
+  * blocking "google.com" must also match:
+
+    * google.com.br
+    * google.com.ar
+
+---
+
+### 11.9 CRITICAL RULE
+
+* The evaluation order of shouldBlockUrl must NEVER be modified
+* Exception rules must ALWAYS be evaluated before blocking rules
+* Blocking priority must ALWAYS be respected
+* Any change to this logic requires explicit confirmation
+
+### 11.10 CRITICAL BLOCKING ENGINE TESTS
+
+The following tests are mandatory and define the core behavior of the blocking system.
+
+These tests must always exist and must never be removed or weakened.
+
+1. Exception priority
+
+* The system must apply exception rules before any blocking logic
+* Extension pages, "diretoria" user and Brasília free window must always bypass blocking
+
+2. blockedSites priority
+
+* Domains present in blockedSites must always be blocked
+* blockedSites must override allowedDomains and tempAllowedLinks
+
+3. tempAllowedLinks behavior
+
+* Domains in tempAllowedLinks must be allowed until an admin decision is made
+* Access must be granted immediately after request
+
+4. approve behavior
+
+* Approving a domain must remove it from tempAllowedLinks
+* The domain must be added to allowedDomains
+* The domain must become permanently allowed
+
+5. block behavior
+
+* Blocking a domain must remove it from tempAllowedLinks
+* The domain must be added to blockedSites
+* The domain must become blocked immediately
+
+Critical rule:
+These tests define the core contract of the blocking system.
+If any of these tests fail, the implementation must be fixed, not the tests.
 
 Default rule:
 Failing tests indicate a problem in the implementation, not in the test.
