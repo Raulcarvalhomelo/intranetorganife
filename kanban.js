@@ -93,6 +93,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const taskRecurrenceSelect = document.getElementById('taskRecurrenceSelect');
   const taskSprintInput = document.getElementById('taskSprintInput');
   const taskDependsOnInput = document.getElementById('taskDependsOnInput');
+  const taskDependsOnSearchInput = document.getElementById('taskDependsOnSearchInput');
+  const taskDependsOnSuggestions = document.getElementById('taskDependsOnSuggestions');
+  const taskDependsOnList = document.getElementById('taskDependsOnList');
   const cancelTaskDetailsBtn = document.getElementById('cancelTaskDetailsBtn');
   const saveTaskDetailsBtn = document.getElementById('saveTaskDetailsBtn');
   const kanbanToastStack = document.getElementById('kanbanToastStack');
@@ -109,7 +112,8 @@ document.addEventListener('DOMContentLoaded', () => {
     || !taskTitleInput || !taskPrioritySelect || !taskDepartmentSelect || !addTaskDepartmentBtn || !taskDepartmentsList
     || !taskDueDateInput || !taskTagInput || !addTaskTagBtn || !taskTagsList
     || !taskAttachmentLabelInput || !taskAttachmentUrlInput || !pickTaskAttachmentFileBtn || !addTaskAttachmentBtn || !taskAttachmentsList
-    || !taskDescriptionInput || !taskRecurrenceSelect || !taskSprintInput || !taskDependsOnInput || !cancelTaskDetailsBtn || !saveTaskDetailsBtn
+    || !taskDescriptionInput || !taskRecurrenceSelect || !taskSprintInput || !taskDependsOnInput || !taskDependsOnSearchInput
+    || !taskDependsOnSuggestions || !taskDependsOnList || !cancelTaskDetailsBtn || !saveTaskDetailsBtn
   ) {
     return;
   }
@@ -166,6 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let detailsDraftDepartments = [];
   let detailsDraftTags = [];
   let detailsDraftAttachments = [];
+  let detailsDraftDependsOn = [];
   let currentUserDepartment = '';
   let pendingChanges = [];
   let isSyncInProgress = false;
@@ -926,6 +931,22 @@ document.addEventListener('DOMContentLoaded', () => {
     return { dependsOn, unresolved, isBlocked: unresolved.length > 0 };
   }
 
+  function validateDependsOnForSave(rawValue, currentId) {
+    const normalized = normalizeDependsOn(rawValue, currentId);
+    const current = sanitizePlainText(currentId || '', 80);
+    const existingIds = new Set(
+      todosState
+        .map((todo) => sanitizePlainText(todo && todo.id ? todo.id : '', 80))
+        .filter((id) => id && id !== current)
+    );
+    const invalidIds = normalized.filter((id) => !existingIds.has(id));
+    return {
+      dependsOn: normalized,
+      invalidIds,
+      isValid: invalidIds.length === 0
+    };
+  }
+
   function matchesFilters(todo) {
     const departments = getTodoDepartments(todo);
     if (!isTodoInActiveDepartment(todo)) return false;
@@ -1105,6 +1126,7 @@ document.addEventListener('DOMContentLoaded', () => {
     detailsDraftDepartments = [];
     detailsDraftTags = [];
     detailsDraftAttachments = [];
+    detailsDraftDependsOn = [];
     taskTitleInput.value = '';
     taskPrioritySelect.value = 'med';
     taskDepartmentSelect.value = '';
@@ -1116,9 +1138,12 @@ document.addEventListener('DOMContentLoaded', () => {
     taskRecurrenceSelect.value = 'none';
     taskSprintInput.value = '';
     taskDependsOnInput.value = '';
+    taskDependsOnSearchInput.value = '';
+    closeDependencySuggestions();
     renderDetailsDepartments();
     renderDetailsTags();
     renderDetailsAttachments();
+    renderDetailsDependsOn();
   }
 
   function renderDetailsDepartments() {
@@ -1181,6 +1206,124 @@ document.addEventListener('DOMContentLoaded', () => {
       chip.appendChild(removeBtn);
       taskTagsList.appendChild(chip);
     });
+  }
+
+  function closeDependencySuggestions() {
+    taskDependsOnSuggestions.classList.remove('is-open');
+    taskDependsOnSuggestions.innerHTML = '';
+  }
+
+  function getDependencyCandidates(searchTerm = '') {
+    const currentId = sanitizePlainText(detailsTodoId || '', 80);
+    const selectedIds = new Set(normalizeDependsOn(detailsDraftDependsOn, currentId));
+    const normalizedTerm = normalizeSearchText(searchTerm);
+    return todosState
+      .filter((todo) => todo && todo.id && sanitizePlainText(todo.id, 80) !== currentId)
+      .filter((todo) => !selectedIds.has(sanitizePlainText(todo.id, 80)))
+      .filter((todo) => {
+        if (!normalizedTerm) return true;
+        const searchable = normalizeSearchText([
+          todo.text || '',
+          todo.id || '',
+          todo.sprintId || '',
+          statusLabels[todo.status] || todo.status || ''
+        ].join(' '));
+        return searchable.includes(normalizedTerm);
+      })
+      .slice(0, 12);
+  }
+
+  function renderDependencySuggestions(searchTerm = taskDependsOnSearchInput.value) {
+    if (!detailsTodoId) {
+      closeDependencySuggestions();
+      return;
+    }
+    const candidates = getDependencyCandidates(searchTerm);
+    taskDependsOnSuggestions.innerHTML = '';
+    if (!candidates.length) {
+      const empty = document.createElement('div');
+      empty.className = 'kanban-empty-inline';
+      empty.textContent = 'Nenhum card encontrado';
+      taskDependsOnSuggestions.appendChild(empty);
+      taskDependsOnSuggestions.classList.add('is-open');
+      return;
+    }
+    candidates.forEach((todo) => {
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.className = 'kanban-dependency-option';
+      option.dataset.dependencyId = sanitizePlainText(todo.id || '', 80);
+      option.textContent = `${sanitizePlainText(todo.text || '', 200)} (#${option.dataset.dependencyId}) - ${statusLabels[todo.status] || todo.status}`;
+      option.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+      });
+      taskDependsOnSuggestions.appendChild(option);
+    });
+    taskDependsOnSuggestions.classList.add('is-open');
+  }
+
+  function renderDetailsDependsOn() {
+    taskDependsOnList.innerHTML = '';
+    const normalized = normalizeDependsOn(detailsDraftDependsOn, detailsTodoId);
+    detailsDraftDependsOn = normalized;
+    taskDependsOnInput.value = normalized.join(', ');
+    if (!normalized.length) {
+      const empty = document.createElement('div');
+      empty.className = 'kanban-empty-inline';
+      empty.textContent = 'Nenhuma dependência selecionada';
+      taskDependsOnList.appendChild(empty);
+      return;
+    }
+    normalized.forEach((dependencyId) => {
+      const dependencyTodo = getTodoById(dependencyId);
+      const chip = document.createElement('span');
+      chip.className = `kanban-chip kanban-dependency-chip${dependencyTodo ? '' : ' kanban-chip-invalid'}`;
+      const text = document.createElement('span');
+      text.className = 'kanban-chip-text';
+      if (dependencyTodo) {
+        text.textContent = `${sanitizePlainText(dependencyTodo.text || '', 200)} (#${dependencyId})`;
+      } else {
+        text.textContent = `Card não encontrado (#${dependencyId})`;
+      }
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'kanban-chip-remove';
+      removeBtn.textContent = '×';
+      removeBtn.title = 'Remover dependência';
+      removeBtn.addEventListener('click', () => {
+        detailsDraftDependsOn = detailsDraftDependsOn.filter((id) => id !== dependencyId);
+        renderDetailsDependsOn();
+        renderDependencySuggestions(taskDependsOnSearchInput.value);
+      });
+      chip.appendChild(text);
+      chip.appendChild(removeBtn);
+      taskDependsOnList.appendChild(chip);
+    });
+  }
+
+  function addDraftDependency(dependencyId) {
+    const id = sanitizePlainText(dependencyId || '', 80);
+    if (!id) return false;
+    if (!detailsTodoId) return false;
+    const currentId = sanitizePlainText(detailsTodoId || '', 80);
+    if (id === currentId) {
+      showToast('Um card não pode depender dele mesmo.', 'warning');
+      return false;
+    }
+    if (detailsDraftDependsOn.includes(id)) return false;
+    if (detailsDraftDependsOn.length >= 20) {
+      showToast('Limite de 20 dependências por card.', 'warning');
+      return false;
+    }
+    if (!getTodoById(id)) {
+      showToast('Selecione apenas cards existentes.', 'warning');
+      return false;
+    }
+    detailsDraftDependsOn = [...detailsDraftDependsOn, id];
+    renderDetailsDependsOn();
+    taskDependsOnSearchInput.value = '';
+    renderDependencySuggestions('');
+    return true;
   }
 
   function requestOpenNativeFileAttachment(fileUrl) {
@@ -1279,6 +1422,7 @@ document.addEventListener('DOMContentLoaded', () => {
     detailsDraftDepartments = getTodoDepartments(todo);
     detailsDraftTags = Array.isArray(todo.tags) ? todo.tags.map((tag) => normalizeTag(tag)).filter(Boolean).slice(0, 10) : [];
     detailsDraftAttachments = normalizeAttachments(todo.attachments);
+    detailsDraftDependsOn = normalizeDependsOn(todo.dependsOn, todo.id);
     taskTitleInput.value = todo.text;
     taskPrioritySelect.value = todo.priority;
     taskDepartmentSelect.value = '';
@@ -1289,10 +1433,13 @@ document.addEventListener('DOMContentLoaded', () => {
     taskDescriptionInput.value = todo.description || '';
     taskRecurrenceSelect.value = normalizeRecurrence(todo.recurrence).type;
     taskSprintInput.value = todo.sprintId || '';
-    taskDependsOnInput.value = normalizeDependsOn(todo.dependsOn, todo.id).join(', ');
+    taskDependsOnInput.value = detailsDraftDependsOn.join(', ');
+    taskDependsOnSearchInput.value = '';
+    closeDependencySuggestions();
     renderDetailsDepartments();
     renderDetailsTags();
     renderDetailsAttachments();
+    renderDetailsDependsOn();
     kanbanDetailsPanel.classList.add('is-open');
   }
 
@@ -1380,7 +1527,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const nextAttachments = normalizeAttachments(detailsDraftAttachments);
     const recurrenceType = recurrenceTypes.includes(taskRecurrenceSelect.value) ? taskRecurrenceSelect.value : 'none';
     const nextSprintId = sanitizePlainText(taskSprintInput.value, 40);
-    const nextDependsOn = normalizeDependsOn(taskDependsOnInput.value, detailsTodoId);
+    const dependencyValidation = validateDependsOnForSave(detailsDraftDependsOn, detailsTodoId);
+    if (!dependencyValidation.isValid) {
+      taskDependsOnSearchInput.focus();
+      showToast(`Dependências inválidas: ${dependencyValidation.invalidIds.join(', ')}.`, 'warning');
+      return;
+    }
+    const nextDependsOn = dependencyValidation.dependsOn;
     const updatedAt = Date.now();
     let changedTodo = null;
     todosState = todosState.map((current) => (
@@ -1630,6 +1783,24 @@ document.addEventListener('DOMContentLoaded', () => {
       addDraftTag();
     }
   });
+  taskDependsOnSearchInput.addEventListener('focus', () => {
+    renderDependencySuggestions(taskDependsOnSearchInput.value);
+  });
+  taskDependsOnSearchInput.addEventListener('input', () => {
+    renderDependencySuggestions(taskDependsOnSearchInput.value);
+  });
+  taskDependsOnSearchInput.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const firstOption = taskDependsOnSuggestions.querySelector('.kanban-dependency-option');
+    if (!firstOption || !firstOption.dataset || !firstOption.dataset.dependencyId) return;
+    addDraftDependency(firstOption.dataset.dependencyId);
+  });
+  taskDependsOnSuggestions.addEventListener('click', (event) => {
+    const option = event.target && event.target.closest ? event.target.closest('.kanban-dependency-option') : null;
+    if (!option || !option.dataset || !option.dataset.dependencyId) return;
+    addDraftDependency(option.dataset.dependencyId);
+  });
   taskAttachmentUrlInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -1644,6 +1815,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (isQuickTaskPopoverOpen && !quickTaskPopover.contains(target) && !openQuickTaskBtn.contains(target)) {
       closeQuickTaskPopover();
+    }
+    if (!taskDependsOnSearchInput.contains(target) && !taskDependsOnSuggestions.contains(target)) {
+      closeDependencySuggestions();
     }
   });
 
@@ -1703,6 +1877,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const dependencyState = getTodoDependencyState(movedTodo);
         if (dependencyState.isBlocked) {
           showToast('Não é possível concluir: existem dependências pendentes.', 'warning');
+          renderTodos();
           return;
         }
       }

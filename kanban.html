@@ -1388,6 +1388,53 @@
       padding: 8px;
       text-align: center;
     }
+    .kanban-dependency-picker {
+      position: relative;
+      display: grid;
+      gap: 6px;
+    }
+    .kanban-dependency-search {
+      width: 100%;
+    }
+    .kanban-dependency-suggestions {
+      display: none;
+      position: absolute;
+      top: calc(100% + 2px);
+      left: 0;
+      right: 0;
+      z-index: 45;
+      max-height: 180px;
+      overflow-y: auto;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      background: rgba(15, 23, 42, 0.98);
+      box-shadow: 0 10px 28px rgba(2, 6, 23, 0.42);
+      padding: 4px;
+    }
+    .kanban-dependency-suggestions.is-open {
+      display: grid;
+      gap: 4px;
+    }
+    .kanban-dependency-option {
+      width: 100%;
+      text-align: left;
+      border: 1px solid transparent;
+      background: transparent;
+      color: #e2e8f0;
+      border-radius: 6px;
+      padding: 7px 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .kanban-dependency-option:hover {
+      border-color: rgba(59, 130, 246, 0.42);
+      background: rgba(37, 99, 235, 0.24);
+    }
+    .kanban-dependency-chip.kanban-chip-invalid {
+      border-color: rgba(248, 113, 113, 0.6);
+      background: rgba(127, 29, 29, 0.28);
+      color: #fecaca;
+    }
     .kanban-details-footer {
       border-top: 1px solid rgba(148, 163, 184, 0.2);
       padding: 10px 14px;
@@ -1861,6 +1908,23 @@
       color: #64748b;
       border-color: #cbd5e1;
     }
+    body[data-theme="light"] .kanban-dependency-suggestions {
+      background: #ffffff;
+      border-color: #e2e8f0;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+    }
+    body[data-theme="light"] .kanban-dependency-option {
+      color: #334155;
+    }
+    body[data-theme="light"] .kanban-dependency-option:hover {
+      border-color: #bfdbfe;
+      background: #eff6ff;
+    }
+    body[data-theme="light"] .kanban-dependency-chip.kanban-chip-invalid {
+      border-color: #fca5a5;
+      background: #fef2f2;
+      color: #b91c1c;
+    }
     body[data-theme="light"] .kanban-toast {
       background: rgba(255, 255, 255, 0.97);
       color: #1e293b;
@@ -2209,8 +2273,13 @@
           <input type="text" id="taskSprintInput" placeholder="Ex: 24">
         </div>
         <div class="kanban-field">
-          <label for="taskDependsOnInput">Dependências (IDs separados por vírgula)</label>
-          <input type="text" id="taskDependsOnInput" placeholder="Ex: 1710000-ab12cd, 1710001-ef34gh">
+          <label for="taskDependsOnSearchInput">Dependências (buscar por card)</label>
+          <input type="hidden" id="taskDependsOnInput">
+          <div class="kanban-dependency-picker">
+            <input type="text" id="taskDependsOnSearchInput" class="kanban-dependency-search" placeholder="Digite título, ID ou sprint">
+            <div class="kanban-dependency-suggestions" id="taskDependsOnSuggestions"></div>
+          </div>
+          <div class="kanban-chip-list" id="taskDependsOnList"></div>
         </div>
       </div>
       <div class="kanban-details-footer">
