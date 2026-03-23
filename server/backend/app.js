@@ -72,6 +72,7 @@ function buildKanbanSseCard(card) {
     due_at: Number(card && card.dueAt) || 0,
     tags: Array.isArray(parseJsonSafe(card && card.tagsJson, [])) ? parseJsonSafe(card && card.tagsJson, []) : [],
     attachments: Array.isArray(parseJsonSafe(card && card.attachmentsJson, [])) ? parseJsonSafe(card && card.attachmentsJson, []) : [],
+    depends_on: Array.isArray(parseJsonSafe(card && card.dependsOnJson, [])) ? parseJsonSafe(card && card.dependsOnJson, []) : [],
     sprint_id: normalizeKanbanText(card && card.sprintId ? card.sprintId : '', 80),
     recurrence: parseJsonSafe(card && card.recurrenceJson, { type: 'none', lastTrigger: 0 }),
     created_at: Number(card && card.createdAt) || Date.now(),
@@ -341,6 +342,20 @@ function normalizeKanbanTimestamp(input, fallback = Date.now()) {
   return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
 }
 
+function normalizeKanbanDependsOn(input, currentId = '') {
+  const current = normalizeKanbanText(currentId, 120);
+  const source = Array.isArray(input) ? input : [];
+  const seen = new Set();
+  const list = [];
+  source.forEach((value) => {
+    const normalized = normalizeKanbanText(value, 120);
+    if (!normalized || normalized === current || seen.has(normalized)) return;
+    seen.add(normalized);
+    list.push(normalized);
+  });
+  return list.slice(0, 20);
+}
+
 function normalizeKanbanCardInput(input, fallbackUpdatedAt = Date.now()) {
   const source = input && typeof input === 'object' ? input : {};
   const id = normalizeKanbanText(source.id, 120);
@@ -363,6 +378,10 @@ function normalizeKanbanCardInput(input, fallbackUpdatedAt = Date.now()) {
     source.due_at !== undefined && source.due_at !== null ? source.due_at : source.dueAt,
     0
   );
+  const dependsOn = normalizeKanbanDependsOn(
+    source.depends_on !== undefined && source.depends_on !== null ? source.depends_on : source.dependsOn,
+    id
+  );
   const departments = normalizeKanbanDepartments(source.departments, source.department);
   return {
     id,
@@ -373,6 +392,7 @@ function normalizeKanbanCardInput(input, fallbackUpdatedAt = Date.now()) {
     dueAt,
     tagsJson: JSON.stringify(Array.isArray(source.tags) ? source.tags : []),
     attachmentsJson: JSON.stringify(Array.isArray(source.attachments) ? source.attachments : []),
+    dependsOnJson: JSON.stringify(dependsOn),
     sprintId: normalizeKanbanText(
       source.sprint_id !== undefined && source.sprint_id !== null ? source.sprint_id : source.sprintId,
       80
@@ -598,6 +618,7 @@ async function initializeKanbanStore() {
   `);
   await runSql('CREATE INDEX IF NOT EXISTS idx_cards_updated_at ON cards(updated_at)');
   await runSql('CREATE INDEX IF NOT EXISTS idx_card_departments_slug ON card_departments(department_slug, deleted, updated_at)');
+  await runSql('ALTER TABLE cards ADD COLUMN depends_on_json TEXT').catch(() => {});
   await migrateNdjsonSnapshotsToSqlite();
   await flushKanbanDbToDisk();
 }
@@ -609,8 +630,8 @@ async function upsertKanbanCard(card) {
     await runSql(
       `INSERT INTO cards (
         id, title, description, status, priority, due_at, tags_json, attachments_json,
-        sprint_id, recurrence_json, created_at, updated_at, deleted
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        depends_on_json, sprint_id, recurrence_json, created_at, updated_at, deleted
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         description = excluded.description,
@@ -619,6 +640,7 @@ async function upsertKanbanCard(card) {
         due_at = excluded.due_at,
         tags_json = excluded.tags_json,
         attachments_json = excluded.attachments_json,
+        depends_on_json = excluded.depends_on_json,
         sprint_id = excluded.sprint_id,
         recurrence_json = excluded.recurrence_json,
         created_at = excluded.created_at,
@@ -634,6 +656,7 @@ async function upsertKanbanCard(card) {
         card.dueAt,
         card.tagsJson,
         card.attachmentsJson,
+        card.dependsOnJson,
         card.sprintId,
         card.recurrenceJson,
         card.createdAt,
@@ -724,6 +747,8 @@ function mapCardRow(row, departments) {
     dueAt: Number(row.due_at) || 0,
     tags: parseJsonArray(row.tags_json),
     attachments: parseJsonArray(row.attachments_json),
+    depends_on: parseJsonArray(row.depends_on_json),
+    dependsOn: parseJsonArray(row.depends_on_json),
     sprint_id: String(row.sprint_id || ''),
     sprintId: String(row.sprint_id || ''),
     recurrence: parseJsonObject(row.recurrence_json, { type: 'none', lastTrigger: 0 }),

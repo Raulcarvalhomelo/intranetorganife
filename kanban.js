@@ -2,6 +2,9 @@ const browserAPI = (typeof browser !== 'undefined' ? browser : chrome);
 const THEME_STORAGE_KEY = 'themeMode';
 const KANBAN_SHOW_BACKLOG_KEY = 'kanbanShowBacklog';
 const KANBAN_REALTIME_DELTA_KEY = 'kanbanRealtimeDelta';
+const KANBAN_WIP_LIMITS_KEY = 'kanbanWipLimits';
+const KANBAN_AGING_STALE_DAYS_KEY = 'kanbanAgingStaleDays';
+const KANBAN_NOTIFICATION_LOG_KEY = 'kanbanNotificationLog';
 
 function normalizeThemeMode(value) {
   return String(value || '').trim().toLowerCase() === 'dark' ? 'dark' : 'light';
@@ -42,8 +45,6 @@ function initTheme() {
 document.addEventListener('DOMContentLoaded', () => {
   const kanbanOverlay = document.getElementById('kanbanOverlay');
   const kanbanBoard = document.getElementById('kanbanBoard');
-  const todoForm = document.getElementById('todoForm');
-  const todoInput = document.getElementById('todoInput');
   const closeKanbanBtn = document.getElementById('closeKanbanBtn');
   const refreshKanbanSnapshotBtn = document.getElementById('refreshKanbanSnapshotBtn');
   const kanbanBacklogList = document.getElementById('kanbanBacklogList');
@@ -59,6 +60,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const departmentFilterInput = document.getElementById('departmentFilterInput');
   const tagFilterInput = document.getElementById('tagFilterInput');
   const sprintFilterInput = document.getElementById('sprintFilterInput');
+  const toggleFiltersBtn = document.getElementById('toggleFiltersBtn');
+  const filtersPopover = document.getElementById('filtersPopover');
+  const openQuickTaskBtn = document.getElementById('openQuickTaskBtn');
+  const quickTaskPopover = document.getElementById('quickTaskPopover');
+  const quickTaskTitleInput = document.getElementById('quickTaskTitleInput');
+  const quickTaskPriorityInput = document.getElementById('quickTaskPriorityInput');
+  const quickTaskDepartmentInput = document.getElementById('quickTaskDepartmentInput');
+  const quickTaskTagsInput = document.getElementById('quickTaskTagsInput');
+  const quickTaskSprintInput = document.getElementById('quickTaskSprintInput');
+  const cancelQuickTaskBtn = document.getElementById('cancelQuickTaskBtn');
   const toggleBacklogBtn = document.getElementById('toggleBacklogBtn');
   const clearBtn = document.getElementById('clearCompletedTodos');
   const toggleAllBtn = document.getElementById('toggleAllTodos');
@@ -81,20 +92,24 @@ document.addEventListener('DOMContentLoaded', () => {
   const taskDescriptionInput = document.getElementById('taskDescriptionInput');
   const taskRecurrenceSelect = document.getElementById('taskRecurrenceSelect');
   const taskSprintInput = document.getElementById('taskSprintInput');
+  const taskDependsOnInput = document.getElementById('taskDependsOnInput');
   const cancelTaskDetailsBtn = document.getElementById('cancelTaskDetailsBtn');
   const saveTaskDetailsBtn = document.getElementById('saveTaskDetailsBtn');
+  const kanbanToastStack = document.getElementById('kanbanToastStack');
 
   if (
-    !kanbanOverlay || !kanbanBoard || !todoForm || !todoInput || !closeKanbanBtn
+    !kanbanOverlay || !kanbanBoard || !closeKanbanBtn
     || !kanbanBacklogList || !kanbanTodoList || !kanbanDoingList || !kanbanDoneList
     || !kanbanColumnCountBacklog || !kanbanColumnCountTodo || !kanbanColumnCountDoing || !kanbanColumnCountDone
     || !todoSearchInput || !priorityFilterInput || !departmentFilterInput || !tagFilterInput || !sprintFilterInput
+    || !toggleFiltersBtn || !filtersPopover || !openQuickTaskBtn || !quickTaskPopover
+    || !quickTaskTitleInput || !quickTaskPriorityInput || !quickTaskDepartmentInput || !quickTaskTagsInput || !quickTaskSprintInput || !cancelQuickTaskBtn
     || !toggleBacklogBtn || !clearBtn || !toggleAllBtn
     || !kanbanDetailsPanel || !closeKanbanDetailsBtn
     || !taskTitleInput || !taskPrioritySelect || !taskDepartmentSelect || !addTaskDepartmentBtn || !taskDepartmentsList
     || !taskDueDateInput || !taskTagInput || !addTaskTagBtn || !taskTagsList
     || !taskAttachmentLabelInput || !taskAttachmentUrlInput || !pickTaskAttachmentFileBtn || !addTaskAttachmentBtn || !taskAttachmentsList
-    || !taskDescriptionInput || !taskRecurrenceSelect || !taskSprintInput || !cancelTaskDetailsBtn || !saveTaskDetailsBtn
+    || !taskDescriptionInput || !taskRecurrenceSelect || !taskSprintInput || !taskDependsOnInput || !cancelTaskDetailsBtn || !saveTaskDetailsBtn
   ) {
     return;
   }
@@ -105,7 +120,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const syncStatuses = ['todo', 'doing', 'done'];
   const priorityOptions = ['low', 'med', 'high', 'urgent'];
   const recurrenceTypes = ['none', 'daily', 'weekly', 'monthly'];
+  const statusLabels = { backlog: 'Backlog', todo: 'A fazer', doing: 'Em andamento', done: 'Concluído' };
   const priorityLabels = { low: 'Baixa', med: 'Média', high: 'Alta', urgent: 'Urgente' };
+  const recurrenceLabels = { daily: 'Diário', weekly: 'Semanal', monthly: 'Mensal' };
   const nativeAttachmentAllowedExtensions = (KanbanAPI && KanbanAPI.constants && KanbanAPI.constants.nativeAttachmentAllowedExtensions)
     ? KanbanAPI.constants.nativeAttachmentAllowedExtensions
     : [
@@ -126,6 +143,12 @@ document.addEventListener('DOMContentLoaded', () => {
     doing: kanbanColumnCountDoing,
     done: kanbanColumnCountDone
   };
+  const healthByStatus = {
+    backlog: document.getElementById('kanbanColumnHealthBacklog'),
+    todo: document.getElementById('kanbanColumnHealthTodo'),
+    doing: document.getElementById('kanbanColumnHealthDoing'),
+    done: document.getElementById('kanbanColumnHealthDone')
+  };
 
   const { sanitizePlainText, normalizeSearchText, normalizePriority, normalizeTag, normalizeDepartments, getSafeHttpUrl } = KanbanAPI.utils;
 
@@ -138,6 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let sprintFilterTerm = '';
   let showBacklog = true;
   let draggingTodoId = '';
+  let wipLimitsState = {};
   let detailsTodoId = '';
   let detailsDraftDepartments = [];
   let detailsDraftTags = [];
@@ -145,6 +169,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentUserDepartment = '';
   let pendingChanges = [];
   let isSyncInProgress = false;
+  let isFiltersPopoverOpen = false;
+  let isQuickTaskPopoverOpen = false;
+  let agingStaleDays = 3;
+  let notificationLogState = {};
 
   function normalizeDueAt(value) {
     const numeric = Number(value);
@@ -172,6 +200,22 @@ document.addEventListener('DOMContentLoaded', () => {
       })
       .filter(Boolean)
       .slice(0, 10);
+  }
+
+  function normalizeDependsOn(values, currentId = '') {
+    const current = sanitizePlainText(currentId || '', 80);
+    const source = Array.isArray(values)
+      ? values
+      : String(values || '').split(',');
+    const seen = new Set();
+    const normalized = [];
+    source.forEach((value) => {
+      const id = sanitizePlainText(value || '', 80);
+      if (!id || id === current || seen.has(id)) return;
+      seen.add(id);
+      normalized.push(id);
+    });
+    return normalized.slice(0, 20);
   }
 
   function normalizeTodo(todo, fallbackIndex = 0) {
@@ -205,6 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
       description: sanitizePlainText(todo.description || '', 2000),
       recurrence: normalizeRecurrence(todo.recurrence),
       sprintId: sanitizePlainText(todo.sprintId || todo.sprint_id || '', 40),
+      dependsOn: normalizeDependsOn(todo.dependsOn ?? todo.depends_on, id),
       isBacklog: rawStatus === 'backlog' || Boolean(todo.isBacklog)
     };
   }
@@ -286,6 +331,16 @@ document.addEventListener('DOMContentLoaded', () => {
     return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
   }
 
+  function formatCardAuditInfo(todo) {
+    const createdLabel = `Criado ${formatTodoDate(todo.createdAt)}`;
+    const updatedAt = Number(todo.updatedAt) || 0;
+    const createdAt = Number(todo.createdAt) || 0;
+    if (updatedAt > createdAt) {
+      return `${createdLabel} · Editado ${formatTodoDate(updatedAt)}`;
+    }
+    return createdLabel;
+  }
+
   function toInputDateValue(timestamp) {
     if (!timestamp) return '';
     const d = new Date(timestamp);
@@ -307,6 +362,86 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function hasActiveFilters() {
     return Boolean(todoSearchTerm || priorityFilterValue !== 'all' || departmentFilterTerm || tagFilterTerm || sprintFilterTerm);
+  }
+
+  function closeFiltersPopover() {
+    isFiltersPopoverOpen = false;
+    filtersPopover.hidden = true;
+    toggleFiltersBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  function openFiltersPopover() {
+    isFiltersPopoverOpen = true;
+    filtersPopover.hidden = false;
+    toggleFiltersBtn.setAttribute('aria-expanded', 'true');
+  }
+
+  function closeQuickTaskPopover() {
+    isQuickTaskPopoverOpen = false;
+    quickTaskPopover.hidden = true;
+    openQuickTaskBtn.setAttribute('aria-expanded', 'false');
+    quickTaskTitleInput.value = '';
+    quickTaskPriorityInput.value = 'med';
+    quickTaskDepartmentInput.value = '';
+    quickTaskTagsInput.value = '';
+    quickTaskSprintInput.value = '';
+  }
+
+  function openQuickTaskPopover() {
+    const activeDepartment = getActiveDepartmentForSync();
+    isQuickTaskPopoverOpen = true;
+    quickTaskPopover.hidden = false;
+    openQuickTaskBtn.setAttribute('aria-expanded', 'true');
+    quickTaskPriorityInput.value = 'med';
+    quickTaskDepartmentInput.value = activeDepartment || '';
+    quickTaskTitleInput.focus();
+  }
+
+  function createTodoFromQuickTask() {
+    const text = sanitizePlainText(quickTaskTitleInput.value, 200);
+    if (!text) {
+      quickTaskTitleInput.focus();
+      showToast('Informe um título para criar a tarefa.', 'warning');
+      return;
+    }
+    const createdAt = Date.now();
+    const id = `${createdAt}-${Math.random().toString(36).slice(2, 8)}`;
+    const activeDepartment = getActiveDepartmentForSync();
+    const selectedDepartment = sanitizePlainText(quickTaskDepartmentInput.value, 60);
+    const primaryDepartment = selectedDepartment || activeDepartment || '';
+    const departments = primaryDepartment ? [primaryDepartment] : [];
+    const parsedTags = sanitizePlainText(quickTaskTagsInput.value, 300)
+      .split(',')
+      .map((value) => normalizeTag(value))
+      .filter(Boolean)
+      .slice(0, 10);
+    const status = showBacklog ? 'backlog' : 'todo';
+    const newTodo = {
+      id,
+      text,
+      completed: false,
+      createdAt,
+      updatedAt: createdAt,
+      deleted: 0,
+      status,
+      isBacklog: status === 'backlog',
+      priority: normalizePriority(quickTaskPriorityInput.value),
+      departments,
+      department: primaryDepartment,
+      dueAt: 0,
+      tags: parsedTags,
+      attachments: [],
+      description: '',
+      recurrence: { type: 'none', lastTrigger: 0 },
+      sprintId: sanitizePlainText(quickTaskSprintInput.value, 40),
+      dependsOn: []
+    };
+    todosState = [...todosState, newTodo];
+    orderByStatusState[status] = [...orderByStatusState[status], id];
+    saveTodos(todosState);
+    void syncCardChange(serializeTodoForSync(newTodo));
+    showToast('Tarefa criada com sucesso.', 'success');
+    closeQuickTaskPopover();
   }
 
   function getSortedTodosForStatus(status) {
@@ -342,6 +477,90 @@ document.addEventListener('DOMContentLoaded', () => {
     return sanitizePlainText(currentUserDepartment || '', 60);
   }
 
+  function normalizeWipLimits(value) {
+    if (!value || typeof value !== 'object') return {};
+    const normalized = {};
+    statuses.forEach((status) => {
+      const limit = Number(value[status]);
+      if (Number.isFinite(limit) && limit > 0) {
+        normalized[status] = Math.floor(limit);
+      }
+    });
+    return normalized;
+  }
+
+  function showToast(message, type = 'info', durationMs = 2600) {
+    if (!kanbanToastStack || !message) return;
+    const safeType = ['success', 'warning', 'error', 'info'].includes(type) ? type : 'info';
+    const toast = document.createElement('div');
+    toast.className = `kanban-toast kanban-toast-${safeType}`;
+    toast.textContent = String(message);
+    kanbanToastStack.appendChild(toast);
+    requestAnimationFrame(() => {
+      toast.classList.add('is-visible');
+    });
+    window.setTimeout(() => {
+      toast.classList.remove('is-visible');
+      window.setTimeout(() => {
+        if (toast.parentNode === kanbanToastStack) {
+          kanbanToastStack.removeChild(toast);
+        }
+      }, 220);
+    }, durationMs);
+  }
+
+  function getLocalDateToken(timestamp = Date.now()) {
+    const d = new Date(timestamp);
+    const year = d.getFullYear();
+    const month = `${d.getMonth() + 1}`.padStart(2, '0');
+    const day = `${d.getDate()}`.padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function notifyUser(message, options = {}) {
+    const safeMessage = sanitizePlainText(message || '', 240);
+    if (!safeMessage) return;
+    const key = sanitizePlainText(options.key || '', 120) || safeMessage;
+    const today = getLocalDateToken();
+    if (notificationLogState[key] === today) return;
+    notificationLogState[key] = today;
+    browserAPI.storage.local.set({ [KANBAN_NOTIFICATION_LOG_KEY]: notificationLogState });
+    showToast(safeMessage, options.type || 'info');
+    if (options.system && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification('Kanban', { body: safeMessage });
+      } catch {
+        return;
+      }
+    }
+  }
+
+  function runDeadlineNotifications() {
+    const todayStart = getStartOfToday();
+    const dayMs = 24 * 60 * 60 * 1000;
+    todosState.forEach((todo) => {
+      if (!todo || todo.status === 'done') return;
+      const dueAt = Number(todo.dueAt) || 0;
+      if (!dueAt) return;
+      const dayDiff = Math.floor((dueAt - todayStart) / dayMs);
+      if (dayDiff === 1) {
+        notifyUser(`Tarefa "${todo.text}" vence amanhã.`, {
+          key: `due-soon-${todo.id}`,
+          type: 'warning',
+          system: false
+        });
+      }
+      if (dayDiff < 0) {
+        const overdueDays = Math.abs(dayDiff);
+        notifyUser(`Tarefa "${todo.text}" atrasada há ${overdueDays} ${overdueDays === 1 ? 'dia' : 'dias'}.`, {
+          key: `due-overdue-${todo.id}-${overdueDays}`,
+          type: 'error',
+          system: false
+        });
+      }
+    });
+  }
+
   function isTodoInActiveDepartment(todo, activeDepartment = getActiveDepartmentForSync()) {
     const scopedDepartment = normalizeSearchText(activeDepartment);
     if (!scopedDepartment) return true;
@@ -362,6 +581,9 @@ document.addEventListener('DOMContentLoaded', () => {
       due_at: normalizeDueAt(source.dueAt),
       tags: (Array.isArray(source.tags) ? source.tags : []).map((tag) => normalizeTag(tag)).filter(Boolean).slice(0, 10),
       attachments: normalizeAttachments(source.attachments),
+      sprint_id: sanitizePlainText(source.sprintId ?? source.sprint_id ?? '', 80),
+      recurrence: normalizeRecurrence(source.recurrence),
+      depends_on: normalizeDependsOn(source.dependsOn ?? source.depends_on, source.id),
       departments,
       updated_at: updatedAt,
       created_at: Number(source.createdAt) || updatedAt,
@@ -452,6 +674,7 @@ document.addEventListener('DOMContentLoaded', () => {
       recurrence: cardInput.recurrence && typeof cardInput.recurrence === 'object'
         ? cardInput.recurrence
         : { type: 'none', lastTrigger: 0 },
+      dependsOn: cardInput.depends_on ?? cardInput.dependsOn,
       isBacklog: String(cardInput.status || '').toLowerCase() === 'backlog'
     }]);
     return normalizedList[0] || null;
@@ -498,7 +721,11 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       if (existingIndex >= 0) {
-        nextTodos[existingIndex] = normalizedCard;
+        const existingTodo = nextTodos[existingIndex];
+        const mergedDependsOn = normalizedCard.dependsOn && normalizedCard.dependsOn.length
+          ? normalizedCard.dependsOn
+          : normalizeDependsOn(existingTodo && existingTodo.dependsOn, normalizedCard.id);
+        nextTodos[existingIndex] = { ...normalizedCard, dependsOn: mergedDependsOn };
         hasChanges = true;
         return;
       }
@@ -536,6 +763,11 @@ document.addEventListener('DOMContentLoaded', () => {
           recurrence: { ...recurrence, lastTrigger: 0 }
         };
         clones.push(clone);
+        notifyUser(`Nova tarefa recorrente criada: "${clone.text}".`, {
+          key: `recurrence-created-${todo.id}-${now}`,
+          type: 'info',
+          system: false
+        });
         hasChanges = true;
         return updated;
       }
@@ -600,7 +832,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const existingUpdatedAt = Number(merged[existingIndex].updatedAt) || 0;
         const incomingUpdatedAt = Number(card.updatedAt) || 0;
         if (incomingUpdatedAt > existingUpdatedAt) {
-          merged[existingIndex] = card;
+          const currentDependsOn = normalizeDependsOn(merged[existingIndex].dependsOn, card.id);
+          const incomingDependsOn = normalizeDependsOn(card.dependsOn, card.id);
+          merged[existingIndex] = { ...card, dependsOn: incomingDependsOn.length ? incomingDependsOn : currentDependsOn };
         }
       });
       todosState = normalizeTodoList(merged);
@@ -626,14 +860,30 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function loadTodos() {
-    browserAPI.storage.local.get(['userTodos', 'kanbanOrderByStatus', 'browserDepartment', 'pendingChanges', KANBAN_SHOW_BACKLOG_KEY], (result) => {
+    browserAPI.storage.local.get([
+      'userTodos',
+      'kanbanOrderByStatus',
+      'browserDepartment',
+      'pendingChanges',
+      KANBAN_SHOW_BACKLOG_KEY,
+      KANBAN_WIP_LIMITS_KEY,
+      KANBAN_AGING_STALE_DAYS_KEY,
+      KANBAN_NOTIFICATION_LOG_KEY
+    ], (result) => {
       todosState = normalizeTodoList(result.userTodos || []);
       orderByStatusState = normalizeOrderByStatus(result.kanbanOrderByStatus, todosState);
       currentUserDepartment = sanitizePlainText(result.browserDepartment || '', 60);
       pendingChanges = Array.isArray(result.pendingChanges) ? result.pendingChanges.filter((entry) => entry && entry.id) : [];
       showBacklog = typeof result[KANBAN_SHOW_BACKLOG_KEY] === 'boolean' ? result[KANBAN_SHOW_BACKLOG_KEY] : true;
+      wipLimitsState = normalizeWipLimits(result[KANBAN_WIP_LIMITS_KEY]);
+      const staleDaysFromStorage = Number(result[KANBAN_AGING_STALE_DAYS_KEY]);
+      agingStaleDays = Number.isFinite(staleDaysFromStorage) && staleDaysFromStorage > 0 ? Math.floor(staleDaysFromStorage) : 3;
+      notificationLogState = result[KANBAN_NOTIFICATION_LOG_KEY] && typeof result[KANBAN_NOTIFICATION_LOG_KEY] === 'object'
+        ? result[KANBAN_NOTIFICATION_LOG_KEY]
+        : {};
       checkRecurrences();
       renderTodos();
+      runDeadlineNotifications();
       void flushPendingChanges();
       void refreshKanbanCardsFromServer();
     });
@@ -643,6 +893,37 @@ document.addEventListener('DOMContentLoaded', () => {
     if (dueAt < getStartOfToday()) return 'kanban-due-overdue';
     if (isSameLocalDay(dueAt, Date.now())) return 'kanban-due-today';
     return '';
+  }
+
+  function isTodoOverdue(todo, todayStart) {
+    if (!todo || todo.status === 'done') return false;
+    return Number(todo.dueAt) > 0 && Number(todo.dueAt) < todayStart;
+  }
+
+  function getTodoAgingInfo(todo, todayStart) {
+    const dueAt = Number(todo && todo.dueAt) || 0;
+    const updatedAt = Number(todo && todo.updatedAt) || Number(todo && todo.createdAt) || Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const overdueDays = dueAt > 0 && dueAt < todayStart && todo.status !== 'done'
+      ? Math.floor((todayStart - dueAt) / dayMs)
+      : 0;
+    const staleAfterDays = Number.isFinite(agingStaleDays) && agingStaleDays > 0 ? agingStaleDays : 3;
+    const staleDays = todo.status !== 'done' ? Math.floor((todayStart - updatedAt) / dayMs) : 0;
+    const isStale = staleDays >= staleAfterDays;
+    return { overdueDays, staleDays, isStale, staleAfterDays };
+  }
+
+  function getTodoDependencyState(todo) {
+    const dependsOn = normalizeDependsOn(todo && todo.dependsOn, todo && todo.id);
+    if (!dependsOn.length) {
+      return { dependsOn: [], unresolved: [], isBlocked: false };
+    }
+    const unresolved = dependsOn.filter((dependencyId) => {
+      const dependencyTodo = getTodoById(dependencyId);
+      if (!dependencyTodo) return true;
+      return dependencyTodo.status !== 'done';
+    });
+    return { dependsOn, unresolved, isBlocked: unresolved.length > 0 };
   }
 
   function matchesFilters(todo) {
@@ -684,27 +965,48 @@ document.addEventListener('DOMContentLoaded', () => {
     const departments = getTodoDepartments(todo);
     const tags = Array.isArray(todo.tags) ? todo.tags : [];
     const recurrenceType = normalizeRecurrence(todo.recurrence).type;
+    const recurrenceLabel = recurrenceLabels[recurrenceType] || recurrenceType;
+    const todayStart = getStartOfToday();
+    const hasDueDate = Number(todo.dueAt) > 0;
+    const dueClass = hasDueDate ? getDueClass(todo.dueAt) : '';
+    const hasOverdue = isTodoOverdue(todo, todayStart);
+    const agingInfo = getTodoAgingInfo(todo, todayStart);
+    const dependencyState = getTodoDependencyState(todo);
+    const auditInfo = formatCardAuditInfo(todo);
+    const contextBadges = [
+      ...departments.map((department) => `<span class="kanban-context-chip">${department}</span>`),
+      ...tags.slice(0, 3).map((tag) => `<span class="kanban-tag-chip">${tag}</span>`)
+    ];
+    const supportBadges = [
+      todo.attachments.length ? `<span class="kanban-card-support-chip">🔗 ${todo.attachments.length}</span>` : '',
+      todo.description ? '<span class="kanban-card-support-chip">📝 Observação</span>' : '',
+      todo.sprintId ? `<span class="kanban-card-support-chip">Sprint #${todo.sprintId}</span>` : '',
+      recurrenceType !== 'none' ? `<span class="kanban-card-support-chip recurrence-badge">🕒 ${recurrenceLabel}</span>` : '',
+      dependencyState.dependsOn.length ? `<span class="kanban-card-support-chip">🔗 ${dependencyState.dependsOn.length} dependência(s)</span>` : ''
+    ].filter(Boolean);
+    const overdueLabel = agingInfo.overdueDays > 0
+      ? `${agingInfo.overdueDays} ${agingInfo.overdueDays === 1 ? 'dia atrasado' : 'dias atrasados'}`
+      : '';
+    card.classList.toggle('kanban-card-overdue', hasOverdue);
+    card.classList.toggle('kanban-card-stale', agingInfo.isStale);
+    card.classList.toggle('kanban-card-blocked', dependencyState.isBlocked);
 
     card.innerHTML = `
       <div class="kanban-card-header">
-        <div class="kanban-card-text">${todo.text}</div>
+        <div class="kanban-card-title">${todo.text}</div>
+      </div>
+      <div class="kanban-card-main-meta">
         <span class="kanban-priority-badge kanban-priority-${todo.priority}">${priorityLabels[todo.priority] || 'Média'}</span>
+        ${hasDueDate ? `<span class="kanban-card-deadline ${dueClass}">📅 ${formatDueDate(todo.dueAt)}</span>` : ''}
+        ${hasOverdue ? '<span class="kanban-card-overdue-flag">Atrasado</span>' : ''}
+        ${overdueLabel ? `<span class="kanban-card-aging-flag">${overdueLabel}</span>` : ''}
+        ${agingInfo.isStale ? `<span class="kanban-card-stale-flag">${agingInfo.staleDays} dias sem mover</span>` : ''}
+        ${dependencyState.isBlocked ? `<span class="kanban-card-blocked-flag">Bloqueado por dependência</span>` : ''}
       </div>
-      <div class="kanban-card-submeta">
-        ${departments.map((department) => `<span>${department}</span>`).join('')}
-        ${todo.dueAt > 0 ? `<span class="${getDueClass(todo.dueAt)}">📅 ${formatDueDate(todo.dueAt)}</span>` : ''}
-      </div>
-      <div class="kanban-card-tags">
-        ${tags.slice(0, 3).map((tag) => `<span class="kanban-tag-chip">${tag}</span>`).join('')}
-      </div>
-      <div class="kanban-card-indicators">
-        ${todo.attachments.length ? `<span>🔗 ${todo.attachments.length}</span>` : ''}
-        ${todo.description ? '<span>📝</span>' : ''}
-        ${todo.sprintId ? `<span>#${todo.sprintId}</span>` : ''}
-        ${recurrenceType !== 'none' ? `<span class="recurrence-badge">🕒 ${recurrenceType}</span>` : ''}
-      </div>
+      ${contextBadges.length ? `<div class="kanban-card-context">${contextBadges.join('')}</div>` : ''}
+      ${supportBadges.length ? `<div class="kanban-card-indicators">${supportBadges.join('')}</div>` : ''}
       <div class="kanban-card-meta">
-        <span class="kanban-card-date">${formatTodoDate(todo.createdAt)}</span>
+        <span class="kanban-card-date">${auditInfo}</span>
         <div class="kanban-card-actions">
           ${renderCardActions(todo)}
         </div>
@@ -754,10 +1056,33 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderStatusColumn(status) {
     const list = listByStatus[status];
     const countEl = countByStatus[status];
+    const healthEl = healthByStatus[status];
     if (!list || !countEl) return;
     list.innerHTML = '';
-    const items = getSortedTodosForStatus(status).filter((todo) => matchesFilters(todo));
-    countEl.textContent = String(items.length);
+    const allItems = getSortedTodosForStatus(status).filter((todo) => isTodoInActiveDepartment(todo));
+    const items = allItems.filter((todo) => matchesFilters(todo));
+    const todayStart = getStartOfToday();
+    const itemCount = allItems.length;
+    const overdueCount = allItems.filter((todo) => isTodoOverdue(todo, todayStart)).length;
+    const wipLimit = Number(wipLimitsState[status]) || 0;
+    const isOverWip = wipLimit > 0 && itemCount > wipLimit;
+    countEl.textContent = wipLimit > 0 ? `${itemCount}/${wipLimit}` : String(itemCount);
+    if (healthEl) {
+      if (isOverWip && overdueCount > 0) {
+        healthEl.textContent = `⚠ ${overdueCount} atrasados · acima do limite`;
+      } else if (isOverWip) {
+        healthEl.textContent = '⚠ acima do limite';
+      } else if (overdueCount > 0) {
+        healthEl.textContent = `⚠ ${overdueCount} atrasados`;
+      } else {
+        healthEl.textContent = '';
+      }
+    }
+    const column = list.closest('.kanban-column');
+    if (column) {
+      column.classList.toggle('kanban-column-has-overdue', overdueCount > 0);
+      column.classList.toggle('kanban-column-over-wip', isOverWip);
+    }
     if (!items.length) {
       const empty = document.createElement('li');
       empty.className = 'kanban-empty';
@@ -790,6 +1115,7 @@ document.addEventListener('DOMContentLoaded', () => {
     taskDescriptionInput.value = '';
     taskRecurrenceSelect.value = 'none';
     taskSprintInput.value = '';
+    taskDependsOnInput.value = '';
     renderDetailsDepartments();
     renderDetailsTags();
     renderDetailsAttachments();
@@ -893,6 +1219,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!safeUrl || !/^file:/i.test(safeUrl)) return;
     const result = await requestOpenNativeFileAttachment(safeUrl);
     if (!result || !result.ok) {
+      showToast('Não foi possível abrir o arquivo.', 'error');
       alert(`Não foi possível abrir o arquivo.${result && result.message ? `\n${result.message}` : ''}`);
     }
   }
@@ -962,6 +1289,7 @@ document.addEventListener('DOMContentLoaded', () => {
     taskDescriptionInput.value = todo.description || '';
     taskRecurrenceSelect.value = normalizeRecurrence(todo.recurrence).type;
     taskSprintInput.value = todo.sprintId || '';
+    taskDependsOnInput.value = normalizeDependsOn(todo.dependsOn, todo.id).join(', ');
     renderDetailsDepartments();
     renderDetailsTags();
     renderDetailsAttachments();
@@ -979,11 +1307,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const result = await KanbanAPI.native.requestNativeFileAttachment();
     if (!result || !result.ok) {
       if (result && result.code === 'CANCELLED') return;
+      showToast('Não foi possível selecionar o arquivo.', 'error');
       alert(`Não foi possível selecionar o arquivo.${result && result.message ? `\n${result.message}` : ''}`);
       return;
     }
     const safeUrl = getSafeHttpUrl(result.fileUrl || '');
     if (!safeUrl) {
+      showToast('O arquivo selecionado não gerou link válido.', 'error');
       alert('O arquivo selecionado não gerou um link válido.');
       return;
     }
@@ -991,6 +1321,7 @@ document.addEventListener('DOMContentLoaded', () => {
     taskAttachmentUrlInput.value = safeUrl;
     addDraftAttachment();
     if (!result.isNetworkPath) {
+      showToast('Arquivo local pode não funcionar para outros usuários.', 'warning');
       alert('Arquivo local selecionado. O link pode não funcionar para outros usuários.');
     }
   }
@@ -1037,6 +1368,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const nextText = sanitizePlainText(taskTitleInput.value, 200);
     if (!nextText) {
       taskTitleInput.focus();
+      showToast('Informe um título para salvar.', 'warning');
       return;
     }
     const nextPriority = normalizePriority(taskPrioritySelect.value);
@@ -1048,6 +1380,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const nextAttachments = normalizeAttachments(detailsDraftAttachments);
     const recurrenceType = recurrenceTypes.includes(taskRecurrenceSelect.value) ? taskRecurrenceSelect.value : 'none';
     const nextSprintId = sanitizePlainText(taskSprintInput.value, 40);
+    const nextDependsOn = normalizeDependsOn(taskDependsOnInput.value, detailsTodoId);
     const updatedAt = Date.now();
     let changedTodo = null;
     todosState = todosState.map((current) => (
@@ -1067,6 +1400,7 @@ document.addEventListener('DOMContentLoaded', () => {
             lastTrigger: current.recurrence && current.recurrence.lastTrigger ? current.recurrence.lastTrigger : 0
           },
           sprintId: nextSprintId,
+          dependsOn: nextDependsOn,
           updatedAt
         }
         : current
@@ -1083,6 +1417,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (changedTodo) {
       void syncCardChange(serializeTodoForSync(changedTodo));
     }
+    showToast('Tarefa salva com sucesso.', 'success');
     closeDetails();
   }
 
@@ -1090,6 +1425,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!statuses.includes(nextStatus)) return;
     const movedTodo = getTodoById(todoId);
     if (!movedTodo) return;
+    if (nextStatus === 'done') {
+      const dependencyState = getTodoDependencyState(movedTodo);
+      if (dependencyState.isBlocked) {
+        showToast('Não é possível concluir: existem dependências pendentes.', 'warning');
+        return;
+      }
+    }
     const updatedAt = Date.now();
     let hasChanged = false;
     todosState = todosState.map((todo) => {
@@ -1113,6 +1455,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (changedTodo) {
       void syncCardChange(serializeTodoForSync(changedTodo));
     }
+    if (nextStatus === 'done') {
+      showToast('Tarefa concluída.', 'success');
+    } else {
+      showToast(`Card movido para ${statusLabels[nextStatus] || nextStatus}.`, 'info');
+    }
   }
 
   function deleteTodo(todoId) {
@@ -1125,6 +1472,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     saveTodos(todosState);
     void syncCardChange(deletedPayload);
+    showToast('Tarefa removida.', 'warning');
     if (detailsTodoId === todoId) {
       closeDetails();
     }
@@ -1149,39 +1497,33 @@ document.addEventListener('DOMContentLoaded', () => {
     }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
   }
 
-  todoForm.addEventListener('submit', (event) => {
+  toggleFiltersBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (isFiltersPopoverOpen) {
+      closeFiltersPopover();
+      return;
+    }
+    closeQuickTaskPopover();
+    openFiltersPopover();
+  });
+
+  openQuickTaskBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (isQuickTaskPopoverOpen) {
+      closeQuickTaskPopover();
+      return;
+    }
+    closeFiltersPopover();
+    openQuickTaskPopover();
+  });
+
+  cancelQuickTaskBtn.addEventListener('click', () => {
+    closeQuickTaskPopover();
+  });
+
+  quickTaskPopover.addEventListener('submit', (event) => {
     event.preventDefault();
-    const text = sanitizePlainText(todoInput.value, 200);
-    if (!text) return;
-    const createdAt = Date.now();
-    const id = `${createdAt}-${Math.random().toString(36).slice(2, 8)}`;
-    const activeDepartment = getActiveDepartmentForSync();
-    const departments = activeDepartment ? [activeDepartment] : [];
-    const status = showBacklog ? 'backlog' : 'todo';
-    const newTodo = {
-      id,
-      text,
-      completed: false,
-      createdAt,
-      updatedAt: createdAt,
-      deleted: 0,
-      status,
-      isBacklog: status === 'backlog',
-      priority: 'med',
-      departments,
-      department: departments[0] || '',
-      dueAt: 0,
-      tags: [],
-      attachments: [],
-      description: '',
-      recurrence: { type: 'none', lastTrigger: 0 },
-      sprintId: ''
-    };
-    todosState = [...todosState, newTodo];
-    orderByStatusState[status] = [...orderByStatusState[status], id];
-    saveTodos(todosState);
-    void syncCardChange(serializeTodoForSync(newTodo));
-    todoInput.value = '';
+    createTodoFromQuickTask();
   });
 
   clearBtn.addEventListener('click', () => {
@@ -1196,6 +1538,8 @@ document.addEventListener('DOMContentLoaded', () => {
     payloads.forEach((payload) => {
       void syncCardChange(payload);
     });
+    const plural = doneTodos.length > 1 ? 'tarefas concluídas removidas' : 'tarefa concluída removida';
+    showToast(`${doneTodos.length} ${plural}.`, 'success');
     closeDetails();
   });
 
@@ -1209,18 +1553,35 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!toggleConfirmed) return;
     const target = allDone ? 'todo' : 'done';
     const updatedAt = Date.now();
-    todosState = todosState.map((todo) => ({
-      ...todo,
-      status: target,
-      isBacklog: false,
-      completed: target === 'done',
-      updatedAt
-    }));
+    let blockedDoneCount = 0;
+    todosState = todosState.map((todo) => {
+      const dependencyState = target === 'done' ? getTodoDependencyState(todo) : { isBlocked: false };
+      const isBlocked = Boolean(dependencyState.isBlocked);
+      if (target === 'done' && isBlocked) {
+        blockedDoneCount += 1;
+      }
+      return {
+        ...todo,
+        status: target === 'done' && isBlocked ? todo.status : target,
+        isBacklog: target === 'done' && isBlocked ? todo.isBacklog : false,
+        completed: target === 'done' ? !isBlocked : false,
+        updatedAt
+      };
+    });
     syncStatusAndOrder();
     saveTodos(todosState);
     todosState.forEach((todo) => {
       void syncCardChange(serializeTodoForSync(todo));
     });
+    if (target === 'done') {
+      const doneCount = todosState.filter((todo) => todo.status === 'done').length;
+      showToast(`${doneCount} tarefas concluídas.`, 'success');
+      if (blockedDoneCount > 0) {
+        showToast(`${blockedDoneCount} card(s) ficaram pendentes por dependências.`, 'warning');
+      }
+    } else {
+      showToast('Todas as tarefas voltaram para A fazer.', 'info');
+    }
   });
 
   addTaskDepartmentBtn.addEventListener('click', addDraftDepartment);
@@ -1249,8 +1610,11 @@ document.addEventListener('DOMContentLoaded', () => {
       refreshKanbanSnapshotBtn.disabled = false;
       refreshKanbanSnapshotBtn.textContent = originalLabel;
       if (!result || !result.ok) {
+        showToast('Não foi possível atualizar o Kanban.', 'error');
         alert(`Não foi possível atualizar o Kanban.${result && result.message ? `\n${result.message}` : ''}`);
+        return;
       }
+      showToast('Kanban atualizado com sucesso.', 'success');
     });
   }
 
@@ -1270,6 +1634,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (event.key === 'Enter') {
       event.preventDefault();
       addDraftAttachment();
+    }
+  });
+
+  document.addEventListener('click', (event) => {
+    const target = event.target;
+    if (isFiltersPopoverOpen && !filtersPopover.contains(target) && !toggleFiltersBtn.contains(target)) {
+      closeFiltersPopover();
+    }
+    if (isQuickTaskPopoverOpen && !quickTaskPopover.contains(target) && !openQuickTaskBtn.contains(target)) {
+      closeQuickTaskPopover();
     }
   });
 
@@ -1325,6 +1699,13 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!todoId) return;
       const movedTodo = getTodoById(todoId);
       if (!movedTodo) return;
+      if (status === 'done') {
+        const dependencyState = getTodoDependencyState(movedTodo);
+        if (dependencyState.isBlocked) {
+          showToast('Não é possível concluir: existem dependências pendentes.', 'warning');
+          return;
+        }
+      }
       const updatedAt = Date.now();
       todosState = todosState.map((todo) => (
         todo.id === todoId
@@ -1336,6 +1717,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const nextTodo = getTodoById(todoId);
       if (nextTodo) {
         void syncCardChange(serializeTodoForSync(nextTodo));
+      }
+      if (status === 'done') {
+        showToast('Tarefa concluída.', 'success');
+      } else {
+        showToast(`Card movido para ${statusLabels[status] || status}.`, 'info');
       }
     });
   });
@@ -1350,7 +1736,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const key = String(event.key || '').toLowerCase();
     if (key === 'n') {
       event.preventDefault();
-      todoInput.focus();
+      if (!isQuickTaskPopoverOpen) {
+        closeFiltersPopover();
+        openQuickTaskPopover();
+      } else {
+        quickTaskTitleInput.focus();
+      }
     }
     if (key === 'f') {
       event.preventDefault();
@@ -1361,6 +1752,12 @@ document.addEventListener('DOMContentLoaded', () => {
       toggleBacklogBtn.click();
     }
     if (key === 'escape') {
+      if (isFiltersPopoverOpen) {
+        closeFiltersPopover();
+      }
+      if (isQuickTaskPopoverOpen) {
+        closeQuickTaskPopover();
+      }
       if (kanbanDetailsPanel.classList.contains('is-open')) {
         closeDetails();
       }
@@ -1378,6 +1775,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (changes[KANBAN_REALTIME_DELTA_KEY]) {
       applyRealtimeKanbanDelta(changes[KANBAN_REALTIME_DELTA_KEY].newValue);
+    }
+    if (changes[KANBAN_WIP_LIMITS_KEY]) {
+      wipLimitsState = normalizeWipLimits(changes[KANBAN_WIP_LIMITS_KEY].newValue);
+      renderTodos();
+    }
+    if (changes[KANBAN_AGING_STALE_DAYS_KEY]) {
+      const nextValue = Number(changes[KANBAN_AGING_STALE_DAYS_KEY].newValue);
+      agingStaleDays = Number.isFinite(nextValue) && nextValue > 0 ? Math.floor(nextValue) : 3;
+      renderTodos();
+    }
+    if (changes[KANBAN_NOTIFICATION_LOG_KEY]) {
+      notificationLogState = changes[KANBAN_NOTIFICATION_LOG_KEY].newValue && typeof changes[KANBAN_NOTIFICATION_LOG_KEY].newValue === 'object'
+        ? changes[KANBAN_NOTIFICATION_LOG_KEY].newValue
+        : {};
     }
   });
 

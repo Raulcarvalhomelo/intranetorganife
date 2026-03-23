@@ -747,15 +747,76 @@
       background: rgba(51, 65, 85, 0.9);
     }
     .kanban-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+      min-height: 46px;
+      overflow: visible;
+      white-space: nowrap;
+      position: relative;
+      z-index: 30;
+    }
+    .kanban-toolbar::-webkit-scrollbar {
+      height: 6px;
+    }
+    .kanban-toolbar::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.32);
+      border-radius: 999px;
+    }
+    .kanban-toolbar-popover-wrap {
+      position: relative;
+      flex: 0 0 auto;
+    }
+    .kanban-search-compact {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 30px;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.4);
+      padding: 0 8px;
+      flex: 0 0 auto;
+    }
+    .kanban-search-icon {
+      font-size: 12px;
+      line-height: 1;
+      color: #94a3b8;
+    }
+    .kanban-popover {
+      position: absolute;
+      top: calc(100% + 6px);
+      /* right: 0; */
+      width: min(320px, calc(100vw - 30px));
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.98);
+      box-shadow: 0 14px 34px rgba(2, 6, 23, 0.42);
+      padding: 10px;
       display: grid;
       gap: 8px;
-      padding: 10px 16px 12px;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+      z-index: 1400;
+      white-space: normal;
     }
-    .kanban-toolbar-row {
+    .kanban-popover[hidden] {
+      display: none;
+    }
+    .kanban-popover-header {
+      font-size: 11px;
+      font-weight: 700;
+      color: #cbd5e1;
+    }
+    .kanban-quick-task-actions {
       display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+    .kanban-compact-btn {
+      min-height: 30px;
+      padding: 0 9px;
+      font-size: 12px;
     }
     .kanban-filter-select,
     .kanban-filter-input {
@@ -777,48 +838,21 @@
       border-color: rgba(59, 130, 246, 0.55);
     }
     .todo-search {
-      width: 100%;
-      background: rgba(15, 23, 42, 0.4);
-      border: 1px solid rgba(148, 163, 184, 0.2);
+      width: 114px;
+      background: transparent;
+      border: none;
       border-radius: 8px;
-      padding: 9px 12px;
+      padding: 6px 2px;
       color: #e2e8f0;
-      font-size: 13px;
+      font-size: 12px;
       outline: none;
-      transition: border-color 0.2s, background 0.2s;
+      transition: width 0.2s;
     }
     .todo-search::placeholder {
       color: #94a3b8;
     }
     .todo-search:focus {
-      border-color: rgba(59, 130, 246, 0.55);
-      background: rgba(15, 23, 42, 0.55);
-    }
-    .add-todo {
-      display: flex;
-      gap: 8px;
-      flex: 1;
-      min-width: 280px;
-    }
-    .add-todo-input {
-      flex: 1;
-      background: rgba(15, 23, 42, 0.4);
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      border-radius: 6px;
-      padding: 8px 12px;
-      color: #e2e8f0;
-      font-size: 13px;
-      outline: none;
-    }
-    .add-todo-btn {
-      background: #3b82f6;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      padding: 0 12px;
-      cursor: pointer;
-      font-weight: 600;
-      font-size: 18px;
+      width: 190px;
     }
     .kanban-action-btn {
       border: 1px solid rgba(148, 163, 184, 0.35);
@@ -841,6 +875,8 @@
       gap: 12px;
       overflow: auto;
       min-height: 300px;
+      position: relative;
+      z-index: 1;
     }
     .kanban-column {
       background: rgba(30, 41, 59, 0.5);
@@ -854,7 +890,7 @@
     .kanban-column-header {
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
       gap: 8px;
       padding: 10px 12px;
       border-bottom: 1px solid rgba(148, 163, 184, 0.14);
@@ -871,6 +907,28 @@
       border: 1px solid rgba(148, 163, 184, 0.2);
       border-radius: 999px;
       padding: 2px 8px;
+    }
+    .kanban-column-summary {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+    .kanban-column-health {
+      min-height: 16px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #94a3b8;
+    }
+    .kanban-column.kanban-column-has-overdue .kanban-column-health {
+      color: #fbbf24;
+    }
+    .kanban-column.kanban-column-over-wip {
+      border-color: rgba(248, 113, 113, 0.62);
+      box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.28);
+    }
+    .kanban-column.kanban-column-over-wip .kanban-column-health {
+      color: #fca5a5;
     }
     .kanban-list {
       list-style: none;
@@ -889,11 +947,22 @@
       background: rgba(15, 23, 42, 0.82);
       border: 1px solid rgba(100, 116, 139, 0.4);
       border-radius: 8px;
-      padding: 8px;
+      padding: 10px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
       cursor: pointer;
+    }
+    .kanban-card.kanban-card-overdue {
+      border-color: rgba(248, 113, 113, 0.75);
+      box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.22);
+    }
+    .kanban-card.kanban-card-stale {
+      border-color: rgba(251, 191, 36, 0.72);
+    }
+    .kanban-card.kanban-card-blocked {
+      border-color: rgba(244, 114, 182, 0.72);
+      box-shadow: inset 0 0 0 1px rgba(244, 114, 182, 0.2);
     }
     .kanban-card.dragging {
       opacity: 0.5;
@@ -906,41 +975,99 @@
       align-items: flex-start;
       gap: 8px;
     }
-    .kanban-card-text {
-      font-size: 13px;
-      color: #e2e8f0;
-      line-height: 1.4;
+    .kanban-card-text,
+    .kanban-card-title {
+      font-size: 14px;
+      /* color: rgb(66, 176, 163); */
+      line-height: 1.45;
       word-break: break-word;
       overflow-wrap: anywhere;
-      font-weight: 600;
+      font-weight: 700;
+    }
+    .kanban-card-main-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
     }
     .kanban-priority-badge {
       border-radius: 999px;
-      padding: 2px 8px;
-      font-size: 10px;
+      padding: 3px 9px;
+      font-size: 11px;
       font-weight: 700;
       border: 1px solid transparent;
       flex-shrink: 0;
     }
     .kanban-priority-low {
-      background: rgba(148, 163, 184, 0.2);
+      background: rgba(148, 163, 184);
       color: #cbd5e1;
-      border-color: rgba(148, 163, 184, 0.35);
+      border-color: rgba(148, 163, 184);
     }
     .kanban-priority-med {
-      background: rgba(59, 130, 246, 0.2);
+      background: rgba(59, 130, 246);
       color: #bfdbfe;
-      border-color: rgba(59, 130, 246, 0.4);
+      border-color: rgba(59, 130, 246);
     }
     .kanban-priority-high {
-      background: rgba(251, 146, 60, 0.2);
+      background: rgba(251, 146, 60);
       color: #fed7aa;
-      border-color: rgba(251, 146, 60, 0.45);
+      border-color: rgba(251, 146, 60);
     }
     .kanban-priority-urgent {
-      background: rgba(248, 113, 113, 0.2);
+      background: rgba(248, 113, 113);
       color: #fecaca;
-      border-color: rgba(248, 113, 113, 0.5);
+      border-color: rgba(248, 113, 113);
+    }
+    .kanban-card-deadline {
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #e2e8f0;
+      background: rgba(30, 41, 59, 0.72);
+    }
+    .kanban-card-overdue-flag {
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fecaca;
+      border: 1px solid rgba(248, 113, 113, 0.7);
+      background: rgba(127, 29, 29, 0.32);
+    }
+    .kanban-card-aging-flag {
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fecaca;
+      border: 1px solid rgba(248, 113, 113, 0.6);
+      background: rgba(127, 29, 29, 0.25);
+    }
+    .kanban-card-stale-flag {
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fde68a;
+      border: 1px solid rgba(251, 191, 36, 0.6);
+      background: rgba(120, 53, 15, 0.25);
+    }
+    .kanban-card-blocked-flag {
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fbcfe8;
+      border: 1px solid rgba(244, 114, 182, 0.55);
+      background: rgba(131, 24, 67, 0.28);
+    }
+    .kanban-card-context {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
     }
     .kanban-card-submeta {
       display: flex;
@@ -958,6 +1085,18 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+    .kanban-context-chip {
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 999px;
+      padding: 2px 8px;
+      background: rgba(30, 41, 59, 0.7);
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 11px;
+      color: #cbd5e1;
     }
     .kanban-due-overdue {
       border-color: rgba(248, 113, 113, 0.6);
@@ -986,10 +1125,17 @@
     }
     .kanban-card-indicators {
       display: flex;
+      flex-wrap: wrap;
       gap: 6px;
       align-items: center;
       font-size: 11px;
       color: #cbd5e1;
+    }
+    .kanban-card-support-chip {
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 999px;
+      padding: 2px 8px;
+      background: rgba(30, 41, 59, 0.6);
     }
     .kanban-card-meta {
       display: flex;
@@ -998,7 +1144,7 @@
       gap: 8px;
     }
     .kanban-card-date {
-      font-size: 11px;
+      font-size: 10px;
       color: #94a3b8;
     }
     .kanban-card-actions {
@@ -1020,6 +1166,47 @@
     .kanban-card-btn:hover {
       background: rgba(51, 65, 85, 0.95);
       color: #f8fafc;
+    }
+    .kanban-toast-stack {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      z-index: 2100;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .kanban-toast {
+      min-width: 240px;
+      max-width: min(360px, calc(100vw - 24px));
+      padding: 9px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(15, 23, 42, 0.96);
+      color: #e2e8f0;
+      font-size: 12px;
+      line-height: 1.4;
+      opacity: 0;
+      transform: translateY(-6px);
+      transition: opacity 0.18s ease, transform 0.18s ease;
+      box-shadow: 0 12px 28px rgba(2, 6, 23, 0.35);
+    }
+    .kanban-toast.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .kanban-toast-success {
+      border-color: rgba(74, 222, 128, 0.55);
+    }
+    .kanban-toast-warning {
+      border-color: rgba(251, 191, 36, 0.6);
+    }
+    .kanban-toast-error {
+      border-color: rgba(248, 113, 113, 0.7);
+    }
+    .kanban-toast-info {
+      border-color: rgba(96, 165, 250, 0.55);
     }
     .kanban-empty {
       font-size: 12px;
@@ -1402,7 +1589,7 @@
     body[data-theme="light"] .quick-link,
     body[data-theme="light"] .empty,
     body[data-theme="light"] .notes-area,
-    body[data-theme="light"] .add-todo-input,
+    body[data-theme="light"] .kanban-search-compact,
     body[data-theme="light"] .todo-search {
       background: #ffffff;
       border-color: #e2e8f0;
@@ -1459,9 +1646,6 @@
     }
     body[data-theme="light"] .arrow {
       color: #2A9D8F;
-    }
-    body[data-theme="light"] .add-todo-btn {
-      background: #2A9D8F;
     }
     body[data-theme="light"] .todo-summary-item {
       background: #ffffff;
@@ -1531,7 +1715,7 @@
       background: #eef2ff;
     }
     body[data-theme="light"] .todo-search,
-    body[data-theme="light"] .add-todo-input {
+    body[data-theme="light"] .kanban-search-compact {
       background: #ffffff;
       border-color: #e2e8f0;
       color: #1e293b;
@@ -1557,12 +1741,50 @@
       border-color: #e2e8f0;
       color: #334155;
     }
+    body[data-theme="light"] .kanban-column-health {
+      color: #64748b;
+    }
+    body[data-theme="light"] .kanban-column.kanban-column-has-overdue .kanban-column-health {
+      color: #b45309;
+    }
+    body[data-theme="light"] .kanban-column.kanban-column-over-wip {
+      border-color: #fca5a5;
+      box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.22);
+    }
+    body[data-theme="light"] .kanban-column.kanban-column-over-wip .kanban-column-health {
+      color: #b91c1c;
+    }
     body[data-theme="light"] .kanban-card {
       background: #ffffff;
       border-color: #e2e8f0;
     }
     body[data-theme="light"] .kanban-card-text {
       color: #1e293b;
+    }
+    body[data-theme="light"] .kanban-card-deadline {
+      color: #334155;
+      background: #f8fafc;
+      border-color: #cbd5e1;
+    }
+    body[data-theme="light"] .kanban-card-overdue-flag {
+      color: #b91c1c;
+      background: #fee2e2;
+      border-color: #fca5a5;
+    }
+    body[data-theme="light"] .kanban-card-aging-flag {
+      color: #991b1b;
+      border-color: rgba(239, 68, 68, 0.42);
+      background: rgba(254, 226, 226, 0.85);
+    }
+    body[data-theme="light"] .kanban-card-stale-flag {
+      color: #92400e;
+      border-color: rgba(245, 158, 11, 0.45);
+      background: rgba(254, 243, 199, 0.9);
+    }
+    body[data-theme="light"] .kanban-card-blocked-flag {
+      color: #9d174d;
+      border-color: rgba(236, 72, 153, 0.45);
+      background: rgba(252, 231, 243, 0.92);
     }
     body[data-theme="light"] .kanban-card-btn {
       background: #f8fafc;
@@ -1582,7 +1804,20 @@
       border-color: #e2e8f0;
       color: #1e293b;
     }
+    body[data-theme="light"] .kanban-popover {
+      background: #ffffff;
+      border-color: #e2e8f0;
+      box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14);
+    }
+    body[data-theme="light"] .kanban-popover-header {
+      color: #334155;
+    }
     body[data-theme="light"] .kanban-card-submeta span {
+      background: #ffffff;
+      border-color: #dbeafe;
+      color: #334155;
+    }
+    body[data-theme="light"] .kanban-context-chip {
       background: #ffffff;
       border-color: #dbeafe;
       color: #334155;
@@ -1591,6 +1826,11 @@
       background: #eef2ff;
       border-color: #c7d2fe;
       color: #3730a3;
+    }
+    body[data-theme="light"] .kanban-card-support-chip {
+      background: #f8fafc;
+      border-color: #e2e8f0;
+      color: #334155;
     }
     body[data-theme="light"] .kanban-details-panel {
       background: #ffffff;
@@ -1619,6 +1859,11 @@
     }
     body[data-theme="light"] .kanban-empty-inline {
       color: #64748b;
+      border-color: #cbd5e1;
+    }
+    body[data-theme="light"] .kanban-toast {
+      background: rgba(255, 255, 255, 0.97);
+      color: #1e293b;
       border-color: #cbd5e1;
     }
     @media (max-width: 1000px) {
@@ -1787,63 +2032,102 @@
         <button type="button" class="kanban-modal-close" id="closeKanbanBtn">Fechar</button>
       </div>
       <div class="kanban-toolbar">
-        <input
-          type="search"
-          class="todo-search"
-          id="todoSearchInput"
-          placeholder="Buscar tarefa por palavra..."
-          aria-label="Buscar tarefa por palavra"
-        >
-        <div class="kanban-toolbar-row">
-          <select class="kanban-filter-select" id="priorityFilterInput" aria-label="Filtrar por prioridade">
-            <option value="all">Prioridade: Todas</option>
-            <option value="low">Baixa</option>
-            <option value="med">Média</option>
-            <option value="high">Alta</option>
-            <option value="urgent">Urgente</option>
-          </select>
-          <input type="search" class="kanban-filter-input" id="departmentFilterInput" placeholder="Filtrar departamento">
-          <input type="search" class="kanban-filter-input" id="tagFilterInput" placeholder="Filtrar tag">
-        </div>
-        <div class="kanban-toolbar-row">
-          <form class="add-todo" id="todoForm">
-            <input type="text" class="add-todo-input" id="todoInput" placeholder="Nova tarefa..." required>
-            <button type="submit" class="add-todo-btn">+</button>
-          </form>
-          <div class="header-actions-inline">
-             <input type="text" class="kanban-filter-input" id="sprintFilterInput" placeholder="ID da Sprint (ex: 24)">
-             <button type="button" class="kanban-column-backlog-toggle" id="toggleBacklogBtn">📁 Backlog</button>
+        <label class="kanban-search-compact" for="todoSearchInput">
+          <span class="kanban-search-icon">🔍</span>
+          <input
+            type="search"
+            class="todo-search"
+            id="todoSearchInput"
+            placeholder="Buscar..."
+            aria-label="Buscar"
+          >
+        </label>
+        <div class="kanban-toolbar-popover-wrap">
+          <button type="button" class="kanban-action-btn kanban-compact-btn" id="toggleFiltersBtn">Filtros</button>
+          <div class="kanban-popover" id="filtersPopover" hidden>
+            <div class="kanban-popover-header">Filtros</div>
+            <select class="kanban-filter-select" id="priorityFilterInput" aria-label="Filtrar por prioridade">
+              <option value="all">Prioridade: Todas</option>
+              <option value="low">Baixa</option>
+              <option value="med">Média</option>
+              <option value="high">Alta</option>
+              <option value="urgent">Urgente</option>
+            </select>
+            <input type="search" class="kanban-filter-input" id="departmentFilterInput" placeholder="Departamento">
+            <input type="search" class="kanban-filter-input" id="tagFilterInput" placeholder="Tag">
+            <input type="text" class="kanban-filter-input" id="sprintFilterInput" placeholder="Sprint">
           </div>
-          <button type="button" class="kanban-action-btn" id="toggleAllTodos">Concluir todas</button>
-          <button type="button" class="kanban-action-btn" id="clearCompletedTodos">Limpar concluídas</button>
         </div>
+        <div class="kanban-toolbar-popover-wrap">
+          <button type="button" class="kanban-action-btn kanban-compact-btn" id="openQuickTaskBtn">+ Nova tarefa</button>
+          <form class="kanban-popover" id="quickTaskPopover" hidden>
+            <div class="kanban-popover-header">Nova tarefa</div>
+            <input type="text" class="kanban-filter-input" id="quickTaskTitleInput" placeholder="Título" maxlength="200" required>
+            <select class="kanban-filter-select" id="quickTaskPriorityInput" aria-label="Prioridade da tarefa">
+              <option value="med">Média</option>
+              <option value="low">Baixa</option>
+              <option value="high">Alta</option>
+              <option value="urgent">Urgente</option>
+            </select>
+            <select class="kanban-filter-select" id="quickTaskDepartmentInput" aria-label="Departamento da tarefa">
+              <option value="">Departamento padrão</option>
+              <option value="Fiscal">Fiscal</option>
+              <option value="DP">DP</option>
+              <option value="Recepção">Recepção</option>
+              <option value="Contabil">Contabil</option>
+              <option value="Legal">Legal</option>
+              <option value="Administrativo">Administrativo</option>
+            </select>
+            <input type="text" class="kanban-filter-input" id="quickTaskTagsInput" placeholder="Tags (vírgula)">
+            <input type="text" class="kanban-filter-input" id="quickTaskSprintInput" placeholder="Sprint">
+            <div class="kanban-quick-task-actions">
+              <button type="button" class="kanban-action-btn kanban-compact-btn" id="cancelQuickTaskBtn">Cancelar</button>
+              <button type="submit" class="kanban-action-btn kanban-compact-btn" id="saveQuickTaskBtn">Salvar</button>
+            </div>
+          </form>
+        </div>
+        <button type="button" class="kanban-column-backlog-toggle" id="toggleBacklogBtn">📁 Backlog</button>
+        <button type="button" class="kanban-action-btn kanban-compact-btn" id="toggleAllTodos">Concluir</button>
+        <button type="button" class="kanban-action-btn kanban-compact-btn" id="clearCompletedTodos">Limpar</button>
       </div>
       <div class="kanban-board" id="kanbanBoard">
         <section class="kanban-column" data-status="backlog">
           <div class="kanban-column-header">
             <h3 class="kanban-column-title">Backlog</h3>
-            <span class="kanban-column-count" id="kanbanColumnCountBacklog">0</span>
+            <div class="kanban-column-summary">
+              <span class="kanban-column-count" id="kanbanColumnCountBacklog">0</span>
+              <span class="kanban-column-health" id="kanbanColumnHealthBacklog"></span>
+            </div>
           </div>
           <ul class="kanban-list" id="kanbanBacklogList"></ul>
         </section>
         <section class="kanban-column" data-status="todo">
           <div class="kanban-column-header">
             <h3 class="kanban-column-title">A fazer</h3>
-            <span class="kanban-column-count" id="kanbanColumnCountTodo">0</span>
+            <div class="kanban-column-summary">
+              <span class="kanban-column-count" id="kanbanColumnCountTodo">0</span>
+              <span class="kanban-column-health" id="kanbanColumnHealthTodo"></span>
+            </div>
           </div>
           <ul class="kanban-list" id="kanbanTodoList"></ul>
         </section>
         <section class="kanban-column" data-status="doing">
           <div class="kanban-column-header">
             <h3 class="kanban-column-title">Em andamento</h3>
-            <span class="kanban-column-count" id="kanbanColumnCountDoing">0</span>
+            <div class="kanban-column-summary">
+              <span class="kanban-column-count" id="kanbanColumnCountDoing">0</span>
+              <span class="kanban-column-health" id="kanbanColumnHealthDoing"></span>
+            </div>
           </div>
           <ul class="kanban-list" id="kanbanDoingList"></ul>
         </section>
         <section class="kanban-column" data-status="done">
           <div class="kanban-column-header">
             <h3 class="kanban-column-title">Concluído</h3>
-            <span class="kanban-column-count" id="kanbanColumnCountDone">0</span>
+            <div class="kanban-column-summary">
+              <span class="kanban-column-count" id="kanbanColumnCountDone">0</span>
+              <span class="kanban-column-health" id="kanbanColumnHealthDone"></span>
+            </div>
           </div>
           <ul class="kanban-list" id="kanbanDoneList"></ul>
         </section>
@@ -1924,6 +2208,10 @@
           <label for="taskSprintInput">ID da Sprint</label>
           <input type="text" id="taskSprintInput" placeholder="Ex: 24">
         </div>
+        <div class="kanban-field">
+          <label for="taskDependsOnInput">Dependências (IDs separados por vírgula)</label>
+          <input type="text" id="taskDependsOnInput" placeholder="Ex: 1710000-ab12cd, 1710001-ef34gh">
+        </div>
       </div>
       <div class="kanban-details-footer">
         <button type="button" class="kanban-inline-btn" id="cancelTaskDetailsBtn">Cancelar</button>
@@ -1936,6 +2224,7 @@
         <span><span class="shortcut-key">Esc</span> Fechar</span>
         <span><span class="shortcut-key">B</span> Toggle Backlog</span>
     </div>
+    <div class="kanban-toast-stack" id="kanbanToastStack" aria-live="polite" aria-atomic="true"></div>
   </div>
   <script src="kanban-core.js"></script>
   <script src="kanban.js"></script>

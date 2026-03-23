@@ -30,17 +30,23 @@
     ],
     "blockedKeywords": [],
     "blockedSites": [
-      "*.worldofwarships.com"
+      "*.worldofwarships.com",
+      "*.track.wargaming-aff.com"
     ],
-    "allowedLinks": [],
+    "allowedLinks": [
+      "about:blank",
+      "file:",
+      "file://",
+      "file:///"
+    ],
     "allowedDomains": [
       "*.extensions",
       "*.web.whatsapp.com",
       "*.booking.com",
       "*.fitgirl-repacks.site",
-      "*.track.wargaming-aff.com",
-      "*.original.com.br",
-      "*.bing.com"
+      "*.bing.com",
+      "*.",
+      "*.original.com.br"
     ],
     "tempAllowedLinks": [
       "*.newtab",
@@ -53,6 +59,17 @@
     "browserUser": ""
   },
   "releaseRequests": [
+    {
+      "id": 1774219226140,
+      "clientRequestId": "1774219226135-36b5f1c928db48",
+      "domain": "*.",
+      "reason": "545",
+      "user": "test",
+      "browser": "Edge",
+      "originalUrl": "about:blank",
+      "timestamp": "2026-03-22T22:40:26.135Z",
+      "status": "aprovado_admin"
+    },
     {
       "id": 1774210088843,
       "clientRequestId": "1774210088837-ce98c46f4cf2d8",
@@ -95,7 +112,7 @@
       "browser": "Opera",
       "originalUrl": "https://track.wargaming-aff.com/click?pid=6808&offer_id=70&sub1=gx-br-wargaming-worldofwarships-sd",
       "timestamp": "2026-03-22T03:10:03.016Z",
-      "status": "aprovado_admin"
+      "status": "bloqueado_admin"
     },
     {
       "id": 1774142947867,
