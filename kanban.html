@@ -990,6 +990,13 @@
       gap: 6px;
       align-items: center;
     }
+    .kanban-card-responsible {
+      font-size: 12px;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
     .kanban-priority-badge {
       border-radius: 999px;
       padding: 3px 9px;
@@ -2338,6 +2345,10 @@
         <div class="kanban-field">
           <label for="taskTitleInput">Título</label>
           <input type="text" id="taskTitleInput" maxlength="200">
+        </div>
+        <div class="kanban-field">
+          <label for="taskAssignedToInput">Responsável</label>
+          <input type="text" id="taskAssignedToInput" maxlength="80" placeholder="Ex: tete">
         </div>
         <div class="kanban-field">
           <label for="taskPrioritySelect">Prioridade</label>

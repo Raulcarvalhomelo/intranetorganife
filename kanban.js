@@ -76,6 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const kanbanDetailsPanel = document.getElementById('kanbanDetailsPanel');
   const closeKanbanDetailsBtn = document.getElementById('closeKanbanDetailsBtn');
   const taskTitleInput = document.getElementById('taskTitleInput');
+  const taskAssignedToInput = document.getElementById('taskAssignedToInput');
   const taskPrioritySelect = document.getElementById('taskPrioritySelect');
   const taskDepartmentSelect = document.getElementById('taskDepartmentSelect');
   const addTaskDepartmentBtn = document.getElementById('addTaskDepartmentBtn');
@@ -114,7 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
     || !quickTaskTitleInput || !quickTaskPriorityInput || !quickTaskDepartmentInput || !quickTaskTagsInput || !quickTaskSprintInput || !cancelQuickTaskBtn
     || !toggleBacklogBtn || !clearBtn || !toggleAllBtn
     || !kanbanDetailsPanel || !closeKanbanDetailsBtn
-    || !taskTitleInput || !taskPrioritySelect || !taskDepartmentSelect || !addTaskDepartmentBtn || !taskDepartmentsList
+    || !taskTitleInput || !taskAssignedToInput || !taskPrioritySelect || !taskDepartmentSelect || !addTaskDepartmentBtn || !taskDepartmentsList
     || !taskDueDateInput || !taskTagInput || !addTaskTagBtn || !taskTagsList
     || !taskAttachmentLabelInput || !taskAttachmentUrlInput || !pickTaskAttachmentFileBtn || !addTaskAttachmentBtn || !taskAttachmentsList
     || !taskDescriptionInput || !taskRecurrenceSelect || !taskSprintInput || !taskDependsOnInput || !openDependencyPickerBtn
@@ -180,6 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let dependencyPickerSelection = [];
   let isDependencyPickerOpen = false;
   let currentUserDepartment = '';
+  let currentBrowserUser = '';
   let pendingChanges = [];
   let isSyncInProgress = false;
   let isFiltersPopoverOpen = false;
@@ -245,6 +247,10 @@ document.addEventListener('DOMContentLoaded', () => {
       .map((tag) => normalizeTag(tag))
       .filter(Boolean)
       .slice(0, 10);
+    const assignedTo = sanitizePlainText(
+      todo.assignedTo ?? todo.assigned_to ?? todo.assignedToDisplay ?? todo.assigned_to_display ?? '',
+      80
+    );
     return {
       id,
       text,
@@ -263,6 +269,7 @@ document.addEventListener('DOMContentLoaded', () => {
       recurrence: normalizeRecurrence(todo.recurrence),
       sprintId: sanitizePlainText(todo.sprintId || todo.sprint_id || '', 40),
       dependsOn: normalizeDependsOn(todo.dependsOn ?? todo.depends_on, id),
+      assignedTo: assignedTo || null,
       isBacklog: rawStatus === 'backlog' || Boolean(todo.isBacklog)
     };
   }
@@ -437,6 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
       .filter(Boolean)
       .slice(0, 10);
     const status = showBacklog ? 'backlog' : 'todo';
+    const assignedTo = getCurrentBrowserUser();
     const newTodo = {
       id,
       text,
@@ -455,7 +463,8 @@ document.addEventListener('DOMContentLoaded', () => {
       description: '',
       recurrence: { type: 'none', lastTrigger: 0 },
       sprintId: sanitizePlainText(quickTaskSprintInput.value, 40),
-      dependsOn: []
+      dependsOn: [],
+      assignedTo
     };
     todosState = [...todosState, newTodo];
     orderByStatusState[status] = [...orderByStatusState[status], id];
@@ -496,6 +505,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function getActiveDepartmentForSync() {
     return sanitizePlainText(currentUserDepartment || '', 60);
+  }
+
+  function getCurrentBrowserUser() {
+    return sanitizePlainText(currentBrowserUser || '', 80) || null;
   }
 
   function normalizeWipLimits(value) {
@@ -593,6 +606,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const departments = normalizeDepartments(source.departments, source.department);
     const updatedAt = Number(source.updatedAt) || Date.now();
     const statusToSync = syncStatuses.includes(source.status) ? source.status : 'todo';
+    const assignedTo = sanitizePlainText(source.assignedTo ?? source.assigned_to ?? '', 80);
     return {
       id: sanitizePlainText(source.id || '', 80),
       title: sanitizePlainText(source.text || source.title || '', 200),
@@ -605,6 +619,8 @@ document.addEventListener('DOMContentLoaded', () => {
       sprint_id: sanitizePlainText(source.sprintId ?? source.sprint_id ?? '', 80),
       recurrence: normalizeRecurrence(source.recurrence),
       depends_on: normalizeDependsOn(source.dependsOn ?? source.depends_on, source.id),
+      assigned_to: assignedTo || null,
+      assigned_to_display: assignedTo || null,
       departments,
       updated_at: updatedAt,
       created_at: Number(source.createdAt) || updatedAt,
@@ -885,6 +901,7 @@ document.addEventListener('DOMContentLoaded', () => {
       'userTodos',
       'kanbanOrderByStatus',
       'browserDepartment',
+      'browserUser',
       'pendingChanges',
       KANBAN_SHOW_BACKLOG_KEY,
       KANBAN_WIP_LIMITS_KEY,
@@ -894,6 +911,7 @@ document.addEventListener('DOMContentLoaded', () => {
       todosState = normalizeTodoList(result.userTodos || []);
       orderByStatusState = normalizeOrderByStatus(result.kanbanOrderByStatus, todosState);
       currentUserDepartment = sanitizePlainText(result.browserDepartment || '', 60);
+      currentBrowserUser = sanitizePlainText(result.browserUser || '', 80);
       pendingChanges = Array.isArray(result.pendingChanges) ? result.pendingChanges.filter((entry) => entry && entry.id) : [];
       showBacklog = typeof result[KANBAN_SHOW_BACKLOG_KEY] === 'boolean' ? result[KANBAN_SHOW_BACKLOG_KEY] : true;
       wipLimitsState = normalizeWipLimits(result[KANBAN_WIP_LIMITS_KEY]);
@@ -1010,6 +1028,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const agingInfo = getTodoAgingInfo(todo, todayStart);
     const dependencyState = getTodoDependencyState(todo);
     const auditInfo = formatCardAuditInfo(todo);
+    const assignedTo = sanitizePlainText(todo.assignedTo || '', 80);
     const contextBadges = [
       ...departments.map((department) => `<span class="kanban-context-chip">${department}</span>`),
       ...tags.slice(0, 3).map((tag) => `<span class="kanban-tag-chip">${tag}</span>`)
@@ -1040,6 +1059,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ${agingInfo.isStale ? `<span class="kanban-card-stale-flag">${agingInfo.staleDays} dias sem mover</span>` : ''}
         ${dependencyState.isBlocked ? `<span class="kanban-card-blocked-flag">Bloqueado por dependência</span>` : ''}
       </div>
+      ${assignedTo ? `<div class="kanban-card-responsible">👤 ${assignedTo}</div>` : ''}
       ${contextBadges.length ? `<div class="kanban-card-context">${contextBadges.join('')}</div>` : ''}
       ${supportBadges.length ? `<div class="kanban-card-indicators">${supportBadges.join('')}</div>` : ''}
       <div class="kanban-card-meta">
@@ -1145,6 +1165,7 @@ document.addEventListener('DOMContentLoaded', () => {
     detailsDraftDependsOn = [];
     dependencyPickerSelection = [];
     taskTitleInput.value = '';
+    taskAssignedToInput.value = '';
     taskPrioritySelect.value = 'med';
     taskDepartmentSelect.value = '';
     taskDueDateInput.value = '';
@@ -1528,6 +1549,7 @@ document.addEventListener('DOMContentLoaded', () => {
     detailsDraftAttachments = normalizeAttachments(todo.attachments);
     detailsDraftDependsOn = normalizeDependsOn(todo.dependsOn, todo.id);
     taskTitleInput.value = todo.text;
+    taskAssignedToInput.value = todo.assignedTo || getCurrentBrowserUser() || '';
     taskPrioritySelect.value = todo.priority;
     taskDepartmentSelect.value = '';
     taskDueDateInput.value = toInputDateValue(todo.dueAt);
@@ -1625,6 +1647,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     const nextPriority = normalizePriority(taskPrioritySelect.value);
+    const nextAssignedTo = sanitizePlainText(taskAssignedToInput.value, 80) || null;
     const nextDepartments = normalizeDepartments(detailsDraftDepartments);
     const nextDepartment = nextDepartments[0] || '';
     const nextDueAt = fromInputDateValue(taskDueDateInput.value);
@@ -1661,6 +1684,7 @@ document.addEventListener('DOMContentLoaded', () => {
           },
           sprintId: nextSprintId,
           dependsOn: nextDependsOn,
+          assignedTo: nextAssignedTo,
           updatedAt
         }
         : current
@@ -2068,6 +2092,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (changes.browserDepartment) {
       currentUserDepartment = sanitizePlainText(changes.browserDepartment.newValue || '', 60);
       renderTodos();
+    }
+    if (changes.browserUser) {
+      currentBrowserUser = sanitizePlainText(changes.browserUser.newValue || '', 80);
     }
     if (changes.themeMode) {
       applyTheme(changes.themeMode.newValue);

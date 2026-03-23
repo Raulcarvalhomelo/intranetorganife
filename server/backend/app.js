@@ -63,6 +63,10 @@ function buildKanbanSseCard(card) {
   const departments = Array.isArray(card && card.departments)
     ? card.departments.map((entry) => normalizeKanbanText(entry && entry.label ? entry.label : '', 80)).filter(Boolean)
     : [];
+  const assignedTo = normalizeKanbanText(
+    card && (card.assignedTo !== undefined ? card.assignedTo : card.assigned_to),
+    80
+  );
   return {
     id: normalizeKanbanText(card && card.id ? card.id : '', 120),
     title: normalizeKanbanText(card && card.title ? card.title : '', 200),
@@ -74,12 +78,16 @@ function buildKanbanSseCard(card) {
     attachments: Array.isArray(parseJsonSafe(card && card.attachmentsJson, [])) ? parseJsonSafe(card && card.attachmentsJson, []) : [],
     depends_on: Array.isArray(parseJsonSafe(card && card.dependsOnJson, [])) ? parseJsonSafe(card && card.dependsOnJson, []) : [],
     sprint_id: normalizeKanbanText(card && card.sprintId ? card.sprintId : '', 80),
+    assigned_to: assignedTo || null,
+    assigned_to_display: assignedTo || null,
     recurrence: parseJsonSafe(card && card.recurrenceJson, { type: 'none', lastTrigger: 0 }),
     created_at: Number(card && card.createdAt) || Date.now(),
     updated_at: Number(card && card.updatedAt) || Date.now(),
     deleted: Number(card && card.deleted) ? 1 : 0,
     departments,
-    department: departments[0] || ''
+    department: departments[0] || '',
+    assignedTo: assignedTo || null,
+    assignedToDisplay: assignedTo || null
   };
 }
 
@@ -383,6 +391,16 @@ function normalizeKanbanCardInput(input, fallbackUpdatedAt = Date.now()) {
     id
   );
   const departments = normalizeKanbanDepartments(source.departments, source.department);
+  const assignedTo = normalizeKanbanText(
+    source.assigned_to !== undefined && source.assigned_to !== null
+      ? source.assigned_to
+      : (
+        source.assignedTo !== undefined && source.assignedTo !== null
+          ? source.assignedTo
+          : (source.assigned_to_display ?? source.assignedToDisplay)
+      ),
+    80
+  );
   return {
     id,
     title: normalizeKanbanText(source.title || source.text, 200),
@@ -397,6 +415,7 @@ function normalizeKanbanCardInput(input, fallbackUpdatedAt = Date.now()) {
       source.sprint_id !== undefined && source.sprint_id !== null ? source.sprint_id : source.sprintId,
       80
     ),
+    assignedTo: assignedTo || null,
     recurrenceJson: JSON.stringify(source.recurrence && typeof source.recurrence === 'object' ? source.recurrence : { type: 'none', lastTrigger: 0 }),
     createdAt,
     updatedAt,
@@ -594,6 +613,7 @@ async function initializeKanbanStore() {
       tags_json TEXT,
       attachments_json TEXT,
       sprint_id TEXT,
+      assigned_to TEXT,
       recurrence_json TEXT,
       created_at INTEGER,
       updated_at INTEGER,
@@ -619,6 +639,7 @@ async function initializeKanbanStore() {
   await runSql('CREATE INDEX IF NOT EXISTS idx_cards_updated_at ON cards(updated_at)');
   await runSql('CREATE INDEX IF NOT EXISTS idx_card_departments_slug ON card_departments(department_slug, deleted, updated_at)');
   await runSql('ALTER TABLE cards ADD COLUMN depends_on_json TEXT').catch(() => {});
+  await runSql('ALTER TABLE cards ADD COLUMN assigned_to TEXT').catch(() => {});
   await migrateNdjsonSnapshotsToSqlite();
   await flushKanbanDbToDisk();
 }
@@ -630,8 +651,8 @@ async function upsertKanbanCard(card) {
     await runSql(
       `INSERT INTO cards (
         id, title, description, status, priority, due_at, tags_json, attachments_json,
-        depends_on_json, sprint_id, recurrence_json, created_at, updated_at, deleted
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        depends_on_json, sprint_id, assigned_to, recurrence_json, created_at, updated_at, deleted
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         description = excluded.description,
@@ -642,6 +663,7 @@ async function upsertKanbanCard(card) {
         attachments_json = excluded.attachments_json,
         depends_on_json = excluded.depends_on_json,
         sprint_id = excluded.sprint_id,
+        assigned_to = excluded.assigned_to,
         recurrence_json = excluded.recurrence_json,
         created_at = excluded.created_at,
         updated_at = excluded.updated_at,
@@ -658,6 +680,7 @@ async function upsertKanbanCard(card) {
         card.attachmentsJson,
         card.dependsOnJson,
         card.sprintId,
+        card.assignedTo,
         card.recurrenceJson,
         card.createdAt,
         card.updatedAt,
@@ -751,6 +774,10 @@ function mapCardRow(row, departments) {
     dependsOn: parseJsonArray(row.depends_on_json),
     sprint_id: String(row.sprint_id || ''),
     sprintId: String(row.sprint_id || ''),
+    assigned_to: row.assigned_to ? String(row.assigned_to) : null,
+    assigned_to_display: row.assigned_to ? String(row.assigned_to) : null,
+    assignedTo: row.assigned_to ? String(row.assigned_to) : null,
+    assignedToDisplay: row.assigned_to ? String(row.assigned_to) : null,
     recurrence: parseJsonObject(row.recurrence_json, { type: 'none', lastTrigger: 0 }),
     created_at: Number(row.created_at) || 0,
     createdAt: Number(row.created_at) || 0,
