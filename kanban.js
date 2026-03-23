@@ -93,6 +93,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const taskRecurrenceSelect = document.getElementById('taskRecurrenceSelect');
   const taskSprintInput = document.getElementById('taskSprintInput');
   const taskDependsOnInput = document.getElementById('taskDependsOnInput');
+  const openDependencyPickerBtn = document.getElementById('openDependencyPickerBtn');
+  const dependencyPickerCountLabel = document.getElementById('dependencyPickerCountLabel');
+  const dependencyPickerModal = document.getElementById('dependencyPickerModal');
+  const dependencyPickerCancelBtn = document.getElementById('dependencyPickerCancelBtn');
+  const dependencyPickerApplyBtn = document.getElementById('dependencyPickerApplyBtn');
   const taskDependsOnSearchInput = document.getElementById('taskDependsOnSearchInput');
   const taskDependsOnSuggestions = document.getElementById('taskDependsOnSuggestions');
   const taskDependsOnList = document.getElementById('taskDependsOnList');
@@ -112,8 +117,9 @@ document.addEventListener('DOMContentLoaded', () => {
     || !taskTitleInput || !taskPrioritySelect || !taskDepartmentSelect || !addTaskDepartmentBtn || !taskDepartmentsList
     || !taskDueDateInput || !taskTagInput || !addTaskTagBtn || !taskTagsList
     || !taskAttachmentLabelInput || !taskAttachmentUrlInput || !pickTaskAttachmentFileBtn || !addTaskAttachmentBtn || !taskAttachmentsList
-    || !taskDescriptionInput || !taskRecurrenceSelect || !taskSprintInput || !taskDependsOnInput || !taskDependsOnSearchInput
-    || !taskDependsOnSuggestions || !taskDependsOnList || !cancelTaskDetailsBtn || !saveTaskDetailsBtn
+    || !taskDescriptionInput || !taskRecurrenceSelect || !taskSprintInput || !taskDependsOnInput || !openDependencyPickerBtn
+    || !dependencyPickerCountLabel || !dependencyPickerModal || !dependencyPickerCancelBtn || !dependencyPickerApplyBtn
+    || !taskDependsOnSearchInput || !taskDependsOnSuggestions || !taskDependsOnList || !cancelTaskDetailsBtn || !saveTaskDetailsBtn
   ) {
     return;
   }
@@ -171,6 +177,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let detailsDraftTags = [];
   let detailsDraftAttachments = [];
   let detailsDraftDependsOn = [];
+  let dependencyPickerSelection = [];
+  let isDependencyPickerOpen = false;
   let currentUserDepartment = '';
   let pendingChanges = [];
   let isSyncInProgress = false;
@@ -307,6 +315,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function getTodoDepartments(todo) {
     return normalizeDepartments(todo && todo.departments, todo && todo.department);
+  }
+
+  function canManageDependencyByDepartment(dependencyTodo) {
+    const activeDepartment = getActiveDepartmentForSync();
+    const scopedDepartment = normalizeSearchText(activeDepartment);
+    if (!scopedDepartment) return Boolean(dependencyTodo);
+    if (!dependencyTodo) return false;
+    return getTodoDepartments(dependencyTodo).some((department) => normalizeSearchText(department) === scopedDepartment);
   }
 
   function getStartOfToday() {
@@ -1127,6 +1143,7 @@ document.addEventListener('DOMContentLoaded', () => {
     detailsDraftTags = [];
     detailsDraftAttachments = [];
     detailsDraftDependsOn = [];
+    dependencyPickerSelection = [];
     taskTitleInput.value = '';
     taskPrioritySelect.value = 'med';
     taskDepartmentSelect.value = '';
@@ -1139,6 +1156,7 @@ document.addEventListener('DOMContentLoaded', () => {
     taskSprintInput.value = '';
     taskDependsOnInput.value = '';
     taskDependsOnSearchInput.value = '';
+    closeDependencyPicker();
     closeDependencySuggestions();
     renderDetailsDepartments();
     renderDetailsTags();
@@ -1209,57 +1227,143 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function closeDependencySuggestions() {
-    taskDependsOnSuggestions.classList.remove('is-open');
     taskDependsOnSuggestions.innerHTML = '';
+  }
+
+  function updateDependencyPickerCountLabel() {
+    const count = normalizeDependsOn(detailsDraftDependsOn, detailsTodoId).length;
+    dependencyPickerCountLabel.textContent = `${count} selecionada${count === 1 ? '' : 's'}`;
+  }
+
+  function closeDependencyPicker(options = {}) {
+    const shouldApply = Boolean(options && options.apply);
+    if (shouldApply) {
+      const currentNormalized = normalizeDependsOn(detailsDraftDependsOn, detailsTodoId);
+      const preservedDependencies = currentNormalized.filter((dependencyId) => {
+        const dependencyTodo = getTodoById(dependencyId);
+        if (!dependencyTodo) return true;
+        return !canManageDependencyByDepartment(dependencyTodo);
+      });
+      const selectedDependencies = normalizeDependsOn(dependencyPickerSelection, detailsTodoId)
+        .filter((dependencyId) => Boolean(getTodoById(dependencyId)));
+      detailsDraftDependsOn = normalizeDependsOn([...preservedDependencies, ...selectedDependencies], detailsTodoId);
+      renderDetailsDependsOn();
+    }
+    isDependencyPickerOpen = false;
+    dependencyPickerModal.classList.remove('is-open');
+    dependencyPickerModal.setAttribute('aria-hidden', 'true');
+    taskDependsOnSearchInput.value = '';
+    closeDependencySuggestions();
+  }
+
+  function openDependencyPicker() {
+    if (!detailsTodoId) return;
+    dependencyPickerSelection = normalizeDependsOn(detailsDraftDependsOn, detailsTodoId);
+    isDependencyPickerOpen = true;
+    dependencyPickerModal.classList.add('is-open');
+    dependencyPickerModal.setAttribute('aria-hidden', 'false');
+    taskDependsOnSearchInput.value = '';
+    renderDependencySuggestions('');
+    taskDependsOnSearchInput.focus();
+  }
+
+  function toggleDependencySelection(dependencyId, checked) {
+    const id = sanitizePlainText(dependencyId || '', 80);
+    if (!id || !detailsTodoId) return;
+    const nextSelection = new Set(normalizeDependsOn(dependencyPickerSelection, detailsTodoId));
+    if (checked) {
+      if (id === detailsTodoId) return;
+      if (!getTodoById(id)) return;
+      nextSelection.add(id);
+    } else {
+      nextSelection.delete(id);
+    }
+    dependencyPickerSelection = [...nextSelection];
   }
 
   function getDependencyCandidates(searchTerm = '') {
     const currentId = sanitizePlainText(detailsTodoId || '', 80);
-    const selectedIds = new Set(normalizeDependsOn(detailsDraftDependsOn, currentId));
     const normalizedTerm = normalizeSearchText(searchTerm);
     return todosState
       .filter((todo) => todo && todo.id && sanitizePlainText(todo.id, 80) !== currentId)
-      .filter((todo) => !selectedIds.has(sanitizePlainText(todo.id, 80)))
+      .filter((todo) => isTodoInActiveDepartment(todo))
       .filter((todo) => {
         if (!normalizedTerm) return true;
+        const departmentsLabel = getTodoDepartments(todo).join(', ');
         const searchable = normalizeSearchText([
           todo.text || '',
           todo.id || '',
           todo.sprintId || '',
-          statusLabels[todo.status] || todo.status || ''
+          statusLabels[todo.status] || todo.status || '',
+          priorityLabels[todo.priority] || todo.priority || '',
+          departmentsLabel
         ].join(' '));
         return searchable.includes(normalizedTerm);
       })
-      .slice(0, 12);
+      .slice(0, 120);
   }
 
   function renderDependencySuggestions(searchTerm = taskDependsOnSearchInput.value) {
-    if (!detailsTodoId) {
+    if (!detailsTodoId || !isDependencyPickerOpen) {
       closeDependencySuggestions();
       return;
     }
     const candidates = getDependencyCandidates(searchTerm);
+    const selected = new Set(normalizeDependsOn(dependencyPickerSelection, detailsTodoId));
     taskDependsOnSuggestions.innerHTML = '';
     if (!candidates.length) {
       const empty = document.createElement('div');
       empty.className = 'kanban-empty-inline';
       empty.textContent = 'Nenhum card encontrado';
       taskDependsOnSuggestions.appendChild(empty);
-      taskDependsOnSuggestions.classList.add('is-open');
       return;
     }
     candidates.forEach((todo) => {
-      const option = document.createElement('button');
-      option.type = 'button';
+      const option = document.createElement('label');
       option.className = 'kanban-dependency-option';
       option.dataset.dependencyId = sanitizePlainText(todo.id || '', 80);
-      option.textContent = `${sanitizePlainText(todo.text || '', 200)} (#${option.dataset.dependencyId}) - ${statusLabels[todo.status] || todo.status}`;
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'kanban-dependency-option-check';
+      checkbox.checked = selected.has(option.dataset.dependencyId);
+      checkbox.addEventListener('change', () => {
+        toggleDependencySelection(option.dataset.dependencyId, checkbox.checked);
+      });
+      const content = document.createElement('span');
+      content.className = 'kanban-dependency-option-content';
+      const title = document.createElement('span');
+      title.className = 'kanban-dependency-option-title';
+      title.textContent = sanitizePlainText(todo.text || '', 200) || 'Sem título';
+      const meta = document.createElement('span');
+      meta.className = 'kanban-dependency-option-meta';
+      const priorityLabel = priorityLabels[todo.priority] || priorityLabels.med;
+      const statusLabel = statusLabels[todo.status] || todo.status || '';
+      const departmentsLabel = getTodoDepartments(todo).join(', ') || 'Sem departamento';
+      meta.textContent = `${priorityLabel} - ${statusLabel} - ${departmentsLabel}`;
+      const idNode = document.createElement('span');
+      idNode.className = 'kanban-dependency-option-id';
+      idNode.textContent = `#${option.dataset.dependencyId}`;
+      content.appendChild(title);
+      content.appendChild(meta);
+      option.appendChild(checkbox);
+      option.appendChild(content);
+      option.appendChild(idNode);
       option.addEventListener('mousedown', (event) => {
         event.preventDefault();
       });
       taskDependsOnSuggestions.appendChild(option);
     });
-    taskDependsOnSuggestions.classList.add('is-open');
+  }
+
+  function buildDependencyChipText(dependencyTodo) {
+    if (!dependencyTodo) {
+      return 'Dependência indisponível para este departamento';
+    }
+    const title = sanitizePlainText(dependencyTodo.text || '', 200) || 'Card sem título';
+    const priorityLabel = priorityLabels[dependencyTodo.priority] || priorityLabels.med;
+    const statusLabel = statusLabels[dependencyTodo.status] || dependencyTodo.status || 'Sem status';
+    const departmentsLabel = getTodoDepartments(dependencyTodo).join(', ') || 'Sem departamento';
+    return `${title} - ${priorityLabel} - ${statusLabel} - ${departmentsLabel}`;
   }
 
   function renderDetailsDependsOn() {
@@ -1267,6 +1371,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const normalized = normalizeDependsOn(detailsDraftDependsOn, detailsTodoId);
     detailsDraftDependsOn = normalized;
     taskDependsOnInput.value = normalized.join(', ');
+    updateDependencyPickerCountLabel();
     if (!normalized.length) {
       const empty = document.createElement('div');
       empty.className = 'kanban-empty-inline';
@@ -1276,27 +1381,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     normalized.forEach((dependencyId) => {
       const dependencyTodo = getTodoById(dependencyId);
+      const canRemove = canManageDependencyByDepartment(dependencyTodo);
       const chip = document.createElement('span');
       chip.className = `kanban-chip kanban-dependency-chip${dependencyTodo ? '' : ' kanban-chip-invalid'}`;
       const text = document.createElement('span');
       text.className = 'kanban-chip-text';
-      if (dependencyTodo) {
-        text.textContent = `${sanitizePlainText(dependencyTodo.text || '', 200)} (#${dependencyId})`;
-      } else {
-        text.textContent = `Card não encontrado (#${dependencyId})`;
-      }
-      const removeBtn = document.createElement('button');
-      removeBtn.type = 'button';
-      removeBtn.className = 'kanban-chip-remove';
-      removeBtn.textContent = '×';
-      removeBtn.title = 'Remover dependência';
-      removeBtn.addEventListener('click', () => {
-        detailsDraftDependsOn = detailsDraftDependsOn.filter((id) => id !== dependencyId);
-        renderDetailsDependsOn();
-        renderDependencySuggestions(taskDependsOnSearchInput.value);
-      });
+      text.textContent = buildDependencyChipText(dependencyTodo);
       chip.appendChild(text);
-      chip.appendChild(removeBtn);
+      if (canRemove) {
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'kanban-chip-remove';
+        removeBtn.textContent = '×';
+        removeBtn.title = 'Remover dependência';
+        removeBtn.addEventListener('click', () => {
+          detailsDraftDependsOn = detailsDraftDependsOn.filter((id) => id !== dependencyId);
+          renderDetailsDependsOn();
+          renderDependencySuggestions(taskDependsOnSearchInput.value);
+        });
+        chip.appendChild(removeBtn);
+      }
       taskDependsOnList.appendChild(chip);
     });
   }
@@ -1435,6 +1539,8 @@ document.addEventListener('DOMContentLoaded', () => {
     taskSprintInput.value = todo.sprintId || '';
     taskDependsOnInput.value = detailsDraftDependsOn.join(', ');
     taskDependsOnSearchInput.value = '';
+    dependencyPickerSelection = normalizeDependsOn(detailsDraftDependsOn, detailsTodoId);
+    closeDependencyPicker();
     closeDependencySuggestions();
     renderDetailsDepartments();
     renderDetailsTags();
@@ -1529,6 +1635,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const nextSprintId = sanitizePlainText(taskSprintInput.value, 40);
     const dependencyValidation = validateDependsOnForSave(detailsDraftDependsOn, detailsTodoId);
     if (!dependencyValidation.isValid) {
+      openDependencyPicker();
       taskDependsOnSearchInput.focus();
       showToast(`Dependências inválidas: ${dependencyValidation.invalidIds.join(', ')}.`, 'warning');
       return;
@@ -1783,23 +1890,37 @@ document.addEventListener('DOMContentLoaded', () => {
       addDraftTag();
     }
   });
-  taskDependsOnSearchInput.addEventListener('focus', () => {
-    renderDependencySuggestions(taskDependsOnSearchInput.value);
+  openDependencyPickerBtn.addEventListener('click', () => {
+    openDependencyPicker();
+  });
+  dependencyPickerCancelBtn.addEventListener('click', () => {
+    closeDependencyPicker();
+  });
+  dependencyPickerApplyBtn.addEventListener('click', () => {
+    closeDependencyPicker({ apply: true });
+  });
+  dependencyPickerModal.addEventListener('click', (event) => {
+    if (event.target === dependencyPickerModal) {
+      closeDependencyPicker();
+    }
   });
   taskDependsOnSearchInput.addEventListener('input', () => {
     renderDependencySuggestions(taskDependsOnSearchInput.value);
   });
   taskDependsOnSearchInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeDependencyPicker();
+      return;
+    }
     if (event.key !== 'Enter') return;
     event.preventDefault();
     const firstOption = taskDependsOnSuggestions.querySelector('.kanban-dependency-option');
     if (!firstOption || !firstOption.dataset || !firstOption.dataset.dependencyId) return;
-    addDraftDependency(firstOption.dataset.dependencyId);
-  });
-  taskDependsOnSuggestions.addEventListener('click', (event) => {
-    const option = event.target && event.target.closest ? event.target.closest('.kanban-dependency-option') : null;
-    if (!option || !option.dataset || !option.dataset.dependencyId) return;
-    addDraftDependency(option.dataset.dependencyId);
+    const checkbox = firstOption.querySelector('.kanban-dependency-option-check');
+    const nextChecked = checkbox ? !checkbox.checked : true;
+    toggleDependencySelection(firstOption.dataset.dependencyId, nextChecked);
+    renderDependencySuggestions(taskDependsOnSearchInput.value);
   });
   taskAttachmentUrlInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
@@ -1816,7 +1937,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isQuickTaskPopoverOpen && !quickTaskPopover.contains(target) && !openQuickTaskBtn.contains(target)) {
       closeQuickTaskPopover();
     }
-    if (!taskDependsOnSearchInput.contains(target) && !taskDependsOnSuggestions.contains(target)) {
+    if (!dependencyPickerModal.contains(target) && !openDependencyPickerBtn.contains(target) && isDependencyPickerOpen) {
+      closeDependencyPicker();
+    }
+    if (!taskDependsOnSuggestions.contains(target) && !taskDependsOnSearchInput.contains(target) && !isDependencyPickerOpen) {
       closeDependencySuggestions();
     }
   });

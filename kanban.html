@@ -1389,31 +1389,88 @@
       text-align: center;
     }
     .kanban-dependency-picker {
-      position: relative;
       display: grid;
-      gap: 6px;
+      gap: 8px;
+    }
+    .kanban-dependency-picker-trigger {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+      text-align: left;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(30, 41, 59, 0.55);
+      color: #e2e8f0;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .kanban-dependency-picker-trigger:hover {
+      border-color: rgba(96, 165, 250, 0.75);
+      background: rgba(30, 64, 175, 0.18);
+    }
+    .kanban-dependency-picker-count {
+      color: #93c5fd;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .kanban-dependency-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 14px;
+      background: rgba(2, 6, 23, 0.56);
+    }
+    .kanban-dependency-modal.is-open {
+      display: flex;
+    }
+    .kanban-dependency-modal-panel {
+      width: min(720px, 100%);
+      max-height: min(560px, calc(100vh - 28px));
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: #0f172a;
+      box-shadow: 0 20px 40px rgba(2, 6, 23, 0.5);
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      gap: 10px;
+      padding: 12px;
+      overflow: hidden;
+    }
+    .kanban-dependency-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .kanban-dependency-modal-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #e2e8f0;
+    }
+    .kanban-dependency-modal-subtitle {
+      font-size: 11px;
+      color: #94a3b8;
     }
     .kanban-dependency-search {
       width: 100%;
     }
     .kanban-dependency-suggestions {
-      display: none;
-      position: absolute;
-      top: calc(100% + 2px);
-      left: 0;
-      right: 0;
-      z-index: 45;
-      max-height: 180px;
+      min-height: 0;
       overflow-y: auto;
       border-radius: 8px;
       border: 1px solid rgba(148, 163, 184, 0.28);
       background: rgba(15, 23, 42, 0.98);
-      box-shadow: 0 10px 28px rgba(2, 6, 23, 0.42);
+      box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.15);
       padding: 4px;
-    }
-    .kanban-dependency-suggestions.is-open {
       display: grid;
       gap: 4px;
+      align-content: start;
     }
     .kanban-dependency-option {
       width: 100%;
@@ -1422,13 +1479,53 @@
       background: transparent;
       color: #e2e8f0;
       border-radius: 6px;
-      padding: 7px 8px;
-      font-size: 12px;
+      padding: 7px 8px 8px;
+      font-size: 11px;
       cursor: pointer;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: start;
     }
     .kanban-dependency-option:hover {
       border-color: rgba(59, 130, 246, 0.42);
       background: rgba(37, 99, 235, 0.24);
+    }
+    .kanban-dependency-option-check {
+      margin-top: 2px;
+      accent-color: #3b82f6;
+    }
+    .kanban-dependency-option-content {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+    }
+    .kanban-dependency-option-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #e2e8f0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .kanban-dependency-option-meta {
+      font-size: 10px;
+      color: #94a3b8;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .kanban-dependency-option-id {
+      font-size: 10px;
+      color: #cbd5e1;
+      justify-self: end;
+      align-self: center;
+      opacity: 0.8;
+    }
+    .kanban-dependency-modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
     }
     .kanban-dependency-chip.kanban-chip-invalid {
       border-color: rgba(248, 113, 113, 0.6);
@@ -1920,6 +2017,41 @@
       border-color: #bfdbfe;
       background: #eff6ff;
     }
+    body[data-theme="light"] .kanban-dependency-option-title {
+      color: #0f172a;
+    }
+    body[data-theme="light"] .kanban-dependency-option-meta {
+      color: #64748b;
+    }
+    body[data-theme="light"] .kanban-dependency-picker-trigger {
+      background: #ffffff;
+      border-color: #cbd5e1;
+      color: #1e293b;
+    }
+    body[data-theme="light"] .kanban-dependency-picker-trigger:hover {
+      border-color: #60a5fa;
+      background: #eff6ff;
+    }
+    body[data-theme="light"] .kanban-dependency-picker-count {
+      color: #1d4ed8;
+    }
+    body[data-theme="light"] .kanban-dependency-modal {
+      background: rgba(15, 23, 42, 0.2);
+    }
+    body[data-theme="light"] .kanban-dependency-modal-panel {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      box-shadow: 0 20px 34px rgba(15, 23, 42, 0.2);
+    }
+    body[data-theme="light"] .kanban-dependency-modal-title {
+      color: #0f172a;
+    }
+    body[data-theme="light"] .kanban-dependency-modal-subtitle {
+      color: #64748b;
+    }
+    body[data-theme="light"] .kanban-dependency-option-id {
+      color: #475569;
+    }
     body[data-theme="light"] .kanban-dependency-chip.kanban-chip-invalid {
       border-color: #fca5a5;
       background: #fef2f2;
@@ -2276,8 +2408,26 @@
           <label for="taskDependsOnSearchInput">Dependências (buscar por card)</label>
           <input type="hidden" id="taskDependsOnInput">
           <div class="kanban-dependency-picker">
-            <input type="text" id="taskDependsOnSearchInput" class="kanban-dependency-search" placeholder="Digite título, ID ou sprint">
-            <div class="kanban-dependency-suggestions" id="taskDependsOnSuggestions"></div>
+            <button type="button" class="kanban-dependency-picker-trigger" id="openDependencyPickerBtn">
+              <span>Selecionar dependências</span>
+              <span class="kanban-dependency-picker-count" id="dependencyPickerCountLabel">0 selecionadas</span>
+            </button>
+            <div class="kanban-dependency-modal" id="dependencyPickerModal" aria-hidden="true">
+              <div class="kanban-dependency-modal-panel">
+                <div class="kanban-dependency-modal-header">
+                  <div>
+                    <div class="kanban-dependency-modal-title">Selecionar dependências</div>
+                    <div class="kanban-dependency-modal-subtitle">Marque múltiplos cards e confirme</div>
+                  </div>
+                </div>
+                <input type="text" id="taskDependsOnSearchInput" class="kanban-dependency-search" placeholder="Buscar por título, prioridade, status, departamento, ID ou sprint">
+                <div class="kanban-dependency-suggestions" id="taskDependsOnSuggestions"></div>
+                <div class="kanban-dependency-modal-footer">
+                  <button type="button" class="kanban-inline-btn" id="dependencyPickerCancelBtn">Cancelar</button>
+                  <button type="button" class="kanban-inline-btn kanban-save-btn" id="dependencyPickerApplyBtn">Confirmar</button>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="kanban-chip-list" id="taskDependsOnList"></div>
         </div>
