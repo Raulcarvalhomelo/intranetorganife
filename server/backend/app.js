@@ -39,7 +39,7 @@ let kanbanDbFlushInProgress = false;
 let kanbanDbFlushQueued = false;
 
 app.use(cors());
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '10mb' }));
 
 function emitUpdate(kind = 'all', extra = null) {
   const basePayload = { updated: true, kind, at: new Date().toISOString() };
@@ -288,15 +288,15 @@ function parseNdjsonLine(line) {
 
 function matchesLogFilters(log, filters) {
   const { q, type, domain, user, users, allUsers } = filters;
-  const logType = getLogType(log).toLowerCase();
+  const logType = normalizeText(getLogType(log));
   const logDomain = getLogDomain(log);
-  const logUser = getLogUser(log).toLowerCase();
-  const logBrowser = getLogBrowser(log).toLowerCase();
+  const logUser = normalizeText(getLogUser(log));
+  const logBrowser = normalizeText(getLogBrowser(log));
   if (type && logType !== type) return false;
   if (domain && logDomain !== domain) return false;
   if (!allUsers) {
-    if (Array.isArray(users) && users.length && !users.some((entry) => logUser.includes(entry))) return false;
-    if (user && !logUser.includes(user)) return false;
+    if (Array.isArray(users) && users.length && !users.some((entry) => logUser === entry)) return false;
+    if (user && logUser !== user) return false;
   }
   if (!q) return true;
   const payload = JSON.stringify(log.details || log.data || log || {}).toLowerCase();
@@ -530,14 +530,15 @@ async function readLogsByDayKeys(dayKeys, filters = {}) {
   const usersList = String(filters.users || '').split(',').map((entry) => entry.trim().toLowerCase()).filter(Boolean);
   const allUsers = String(filters.allUsers || '').trim().toLowerCase();
   const normalizedFilters = {
-    q: String(filters.q || '').trim().toLowerCase(),
-    type: String(filters.type || '').trim().toLowerCase(),
+    q: normalizeText(filters.q || ''),
+    type: normalizeText(filters.type || ''),
     domain: parseDomain(filters.domain || ''),
-    user: String(filters.user || '').trim().toLowerCase(),
-    users: usersList,
+    user: normalizeText(filters.user || ''),
+    users: usersList.map((entry) => normalizeText(entry)),
     allUsers: allUsers === '1' || allUsers === 'true' || allUsers === 'yes'
   };
   const rows = [];
+  const seenIds = new Set();
   for (const dayKey of dayKeys) {
     const filePath = getLogFilePath(dayKey);
     let raw = '';
@@ -552,7 +553,10 @@ async function readLogsByDayKeys(dayKeys, filters = {}) {
       if (!line) continue;
       const parsed = parseNdjsonLine(line);
       if (!parsed) continue;
+      const parsedId = String(parsed.id || '').trim();
+      if (parsedId && seenIds.has(parsedId)) continue;
       if (!matchesLogFilters(parsed, normalizedFilters)) continue;
+      if (parsedId) seenIds.add(parsedId);
       rows.push(parsed);
       if (rows.length >= limit) return rows;
     }
@@ -1153,6 +1157,18 @@ app.post('/logs', (req, res) => {
   res.status(201).json(item);
 });
 
+
+app.post('/logs/batch', (req, res) => {
+  const logs = Array.isArray(req.body && req.body.logs) ? req.body.logs : [];
+  const accepted = [];
+  logs.slice(0, 5000).forEach((log, index) => {
+    if (!log || typeof log !== 'object') return;
+    accepted.push(queueLog(ensureLogItem(log, index)));
+  });
+  if (accepted.length) emitUpdate('logs');
+  res.status(201).json({ saved: accepted.length });
+});
+
 app.get('/logs', async (req, res) => {
   try {
     const limit = Math.max(1, Math.min(1000, Number(req.query.limit) || 200));
@@ -1608,6 +1624,19 @@ app.get('/dashboard/api/logs', requireDashboardAuth, async (req, res) => {
   } catch {
     res.status(500).json({ message: 'erro-ao-consultar-logs' });
   }
+});
+
+
+app.post('/dashboard/api/logs/pull', requireDashboardAuth, (req, res) => {
+  const user = String(req.body && req.body.user || '').trim();
+  const day = normalizeDayKey(req.body && req.body.day || '') || toDayKey(new Date());
+  if (!user) return res.status(400).json({ message: 'usuario-obrigatorio' });
+  emitUpdate('pull_logs', {
+    requestId: `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
+    targetUser: user,
+    day
+  });
+  return res.status(202).json({ requested: true, user, day });
 });
 
 app.get('/dashboard/api/logs/by-user-day', requireDashboardAuth, async (req, res) => {

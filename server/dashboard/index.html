@@ -117,7 +117,7 @@
     <section id="tab-logs" class="tab">
       <h2>Logs</h2>
       <div class="actions-row logs-filters">
-        <input id="logsUserFilter" placeholder="Usuários (ex: joao,maria)" />
+        <input id="logsUserFilter" placeholder="Usuário exato (ex: joao)" />
         <label><input id="logsAllUsers" type="checkbox" /> Todos os usuários</label>
         <input id="logsDayFilter" type="date" />
         <label>De <input id="logsStartTime" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" /></label>
@@ -134,10 +134,8 @@
         </select>
         <button id="refreshLogs">Puxar logs</button>
       </div>
-      <table>
-        <thead><tr><th>Data</th><th>Usuário</th><th>Navegador</th><th>Domínio</th><th>Tipo/Ação</th><th>Dados</th></tr></thead>
-        <tbody id="logsBody"></tbody>
-      </table>
+      <div class="logs-overview" id="logsOverview" aria-live="polite"></div>
+      <div class="logs-list" id="logsBody"></div>
     </section>
 
     <section id="tab-notices" class="tab">

@@ -435,7 +435,115 @@ function formatLogDateTime(timestamp) {
   }).format(date);
 }
 
-async function loadLogs() {
+
+function getLogTypeLabel(type) {
+  const normalized = String(type || '').toLowerCase();
+  const labels = {
+    navigation: 'Navegação',
+    click: 'Clique',
+    download: 'Download',
+    form_submit: 'Formulário',
+    access: 'Acesso',
+    blocked: 'Bloqueio'
+  };
+  return labels[normalized] || type || '-';
+}
+
+function getLogSummary(log) {
+  const payload = getLogPayload(log);
+  const title = String(payload.title || payload.text || payload.label || '').trim();
+  const url = String(payload.url || payload.href || log.url || log.originalUrl || '').trim();
+  if (title && url) return `${title} — ${url}`;
+  if (title) return title;
+  if (url) return url;
+  return JSON.stringify(payload || {});
+}
+
+function buildLogsOverview(rows, selectedUser) {
+  const domains = new Set();
+  const browsers = new Set();
+  const types = new Map();
+  rows.forEach((row) => {
+    const domain = getLogDomain(row);
+    const browser = getLogBrowser(row);
+    const type = getLogTypeLabel(row.type || row.action || '-');
+    if (domain && domain !== '-') domains.add(domain);
+    if (browser && browser !== '-') browsers.add(browser);
+    types.set(type, (types.get(type) || 0) + 1);
+  });
+  const topType = [...types.entries()].sort((a, b) => b[1] - a[1])[0];
+  const labelUser = selectedUser || (rows.length ? getLogUser(rows[0]) : 'Nenhum usuário selecionado');
+  return `
+    <article class="logs-metric logs-metric-primary">
+      <span>Usuário</span>
+      <strong>${esc(labelUser)}</strong>
+      <small>${esc(rows.length)} logs encontrados</small>
+    </article>
+    <article class="logs-metric">
+      <span>Domínios</span>
+      <strong>${esc(domains.size)}</strong>
+      <small>sites diferentes</small>
+    </article>
+    <article class="logs-metric">
+      <span>Navegadores</span>
+      <strong>${esc(browsers.size)}</strong>
+      <small>${esc([...browsers].slice(0, 2).join(', ') || '-')}</small>
+    </article>
+    <article class="logs-metric">
+      <span>Tipo principal</span>
+      <strong>${esc(topType ? topType[0] : '-')}</strong>
+      <small>${esc(topType ? `${topType[1]} ocorrência(s)` : 'sem dados')}</small>
+    </article>
+  `;
+}
+
+function renderLogCards(rows, selectedUser) {
+  const overview = document.getElementById('logsOverview');
+  const body = document.getElementById('logsBody');
+  if (overview) overview.innerHTML = buildLogsOverview(rows, selectedUser);
+  if (!body) return;
+  if (!rows.length) {
+    body.innerHTML = '<div class="logs-empty">Nenhum log encontrado para os filtros selecionados.</div>';
+    return;
+  }
+  body.innerHTML = rows.map((r) => {
+    const type = r.type || r.action || '-';
+    const payload = getLogPayload(r);
+    const summary = getLogSummary(r);
+    return `
+      <article class="log-card">
+        <div class="log-card-main">
+          <div class="log-card-topline">
+            <span class="log-type-pill">${esc(getLogTypeLabel(type))}</span>
+            <time>${esc(formatLogDateTime(r.timestamp))}</time>
+          </div>
+          <h3>${esc(getLogDomain(r) || '-')}</h3>
+          <p>${esc(summary.slice(0, 500))}</p>
+          <div class="log-meta-grid">
+            <span><b>Usuário</b>${esc(getLogUser(r))}</span>
+            <span><b>Navegador</b>${esc(getLogBrowser(r))}</span>
+            <span><b>ID</b>${esc(r.id || '-')}</span>
+          </div>
+        </div>
+        <details class="log-details">
+          <summary>Ver dados técnicos</summary>
+          <pre>${esc(JSON.stringify(payload, null, 2))}</pre>
+        </details>
+      </article>
+    `;
+  }).join('');
+}
+
+async function requestLogsPull(userValue, dayValue) {
+  const user = String(userValue || '').trim();
+  if (!user) throw new Error('usuario-obrigatorio');
+  await api('/logs/pull', {
+    method: 'POST',
+    body: JSON.stringify({ user, day: dayValue })
+  });
+}
+
+async function loadLogs({ pullFromExtension = false } = {}) {
   const params = new URLSearchParams({ limit: '200' });
   const user = document.getElementById('logsUserFilter');
   const allUsers = document.getElementById('logsAllUsers');
@@ -456,6 +564,14 @@ async function loadLogs() {
   const startMinutes = parseTimeToMinutes(startTimeValue);
   const endMinutes = parseTimeToMinutes(endTimeValue);
   const selectedUsers = userValue.split(',').map((entry) => entry.trim()).filter(Boolean);
+  if (pullFromExtension) {
+    if (isAllUsers || selectedUsers.length !== 1) {
+      statusEl.textContent = 'Digite exatamente um usuário e clique em Puxar logs.';
+      return;
+    }
+    await requestLogsPull(selectedUsers[0], dayValue);
+    await new Promise((resolve) => setTimeout(resolve, 800));
+  }
   if (isAllUsers) {
     params.set('allUsers', '1');
   } else if (selectedUsers.length > 1) {
@@ -474,17 +590,7 @@ async function loadLogs() {
   });
   latestCounts.logs = visibleRows.length;
   renderStats();
-  const body = document.getElementById('logsBody');
-  body.innerHTML = visibleRows.map((r) => `
-    <tr>
-      <td>${esc(formatLogDateTime(r.timestamp))}</td>
-      <td>${esc(getLogUser(r))}</td>
-      <td>${esc(getLogBrowser(r))}</td>
-      <td>${esc(getLogDomain(r))}</td>
-      <td>${esc(r.type || r.action || '-')}</td>
-      <td><pre>${esc(JSON.stringify(getLogPayload(r), null, 2))}</pre></td>
-    </tr>
-  `).join('');
+  renderLogCards(visibleRows, isAllUsers ? 'Todos os usuários' : selectedUsers[0]);
 }
 
 function setDefaultLogsDay() {
@@ -544,7 +650,7 @@ function setupLogsFilters() {
   if (search) search.onkeydown = triggerByEnter;
   if (domain) domain.onkeydown = triggerByEnter;
   if (type) type.onchange = () => loadLogs();
-  if (refresh) refresh.onclick = () => loadLogs();
+  if (refresh) refresh.onclick = () => loadLogs({ pullFromExtension: true });
 }
 
 function renderStats() {
