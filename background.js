@@ -275,6 +275,48 @@ function loadSettingsFromStorage() {
 
 loadSettingsFromStorage();
 
+
+function normalizeComparableUserName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function getDayRangeMs(day) {
+  const raw = String(day || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return { sinceMs: 0, untilMs: Date.now() + 1 };
+  const sinceMs = new Date(`${raw}T00:00:00.000Z`).getTime();
+  const untilMs = sinceMs + 24 * 60 * 60 * 1000;
+  if (!Number.isFinite(sinceMs)) return { sinceMs: 0, untilMs: Date.now() + 1 };
+  return { sinceMs, untilMs };
+}
+
+async function sendPulledLogsToServer(payload) {
+  const targetUser = String(payload && payload.targetUser || '').trim();
+  const normalizedTarget = normalizeComparableUserName(targetUser);
+  const normalizedLocal = normalizeComparableUserName(browserUser);
+  if (!normalizedTarget || !normalizedLocal || normalizedTarget !== normalizedLocal) return;
+  const normalizedServerUrl = normalizeServerUrl(serverUrl);
+  if (!normalizedServerUrl) return;
+  const { sinceMs, untilMs } = getDayRangeMs(payload.day);
+  const logs = await readActivityLogs({ action: 'all', sinceMs, limit: 20000 });
+  const selectedLogs = logs.filter((log) => {
+    const logUser = normalizeComparableUserName(log && (log.browserUser || log.windowsUser || log.user || log.user_id));
+    const ms = Number(log && log.timestampMs) || new Date(log && log.timestamp).getTime() || 0;
+    return logUser === normalizedTarget && ms >= sinceMs && ms < untilMs;
+  });
+  if (!selectedLogs.length) return;
+  try {
+    await fetch(`${normalizedServerUrl}/logs/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId: payload.requestId, user: targetUser, day: payload.day, logs: selectedLogs })
+    });
+  } catch {}
+}
+
 function storageLocalGetAsync(keys) {
   return new Promise((resolve) => {
     browserAPI.storage.local.get(keys, (result) => resolve(result || {}));
@@ -510,6 +552,10 @@ function setupSSE() {
         payload = JSON.parse(String(event.data || '{}'));
       } catch {}
       if (!payload || !payload.updated) return;
+      if (String(payload.kind || '').toLowerCase() === 'pull_logs') {
+        await sendPulledLogsToServer(payload);
+        return;
+      }
       if (String(payload.kind || '').toLowerCase() === 'kanban' && String(payload.channel || '').toLowerCase() === 'kanban') {
         await storageLocalSetAsync({
           [KANBAN_REALTIME_DELTA_KEY]: {
