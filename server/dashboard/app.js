@@ -435,7 +435,16 @@ function formatLogDateTime(timestamp) {
   }).format(date);
 }
 
-async function loadLogs() {
+async function requestLogsPull(userValue, dayValue) {
+  const user = String(userValue || '').trim();
+  if (!user) throw new Error('usuario-obrigatorio');
+  await api('/logs/pull', {
+    method: 'POST',
+    body: JSON.stringify({ user, day: dayValue })
+  });
+}
+
+async function loadLogs({ pullFromExtension = false } = {}) {
   const params = new URLSearchParams({ limit: '200' });
   const user = document.getElementById('logsUserFilter');
   const allUsers = document.getElementById('logsAllUsers');
@@ -456,6 +465,14 @@ async function loadLogs() {
   const startMinutes = parseTimeToMinutes(startTimeValue);
   const endMinutes = parseTimeToMinutes(endTimeValue);
   const selectedUsers = userValue.split(',').map((entry) => entry.trim()).filter(Boolean);
+  if (pullFromExtension) {
+    if (isAllUsers || selectedUsers.length !== 1) {
+      statusEl.textContent = 'Digite exatamente um usuário e clique em Puxar logs.';
+      return;
+    }
+    await requestLogsPull(selectedUsers[0], dayValue);
+    await new Promise((resolve) => setTimeout(resolve, 800));
+  }
   if (isAllUsers) {
     params.set('allUsers', '1');
   } else if (selectedUsers.length > 1) {
@@ -544,7 +561,7 @@ function setupLogsFilters() {
   if (search) search.onkeydown = triggerByEnter;
   if (domain) domain.onkeydown = triggerByEnter;
   if (type) type.onchange = () => loadLogs();
-  if (refresh) refresh.onclick = () => loadLogs();
+  if (refresh) refresh.onclick = () => loadLogs({ pullFromExtension: true });
 }
 
 function renderStats() {
