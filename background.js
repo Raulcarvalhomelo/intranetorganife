@@ -307,6 +307,11 @@ async function sendPulledLogsToServer(payload) {
     untilMs,
     user: targetUser,
     limit: 20000
+  const logs = await readActivityLogs({ action: 'all', sinceMs, limit: 20000 });
+  const selectedLogs = logs.filter((log) => {
+    const logUser = normalizeComparableUserName(log && (log.browserUser || log.windowsUser || log.user || log.user_id));
+    const ms = Number(log && log.timestampMs) || new Date(log && log.timestamp).getTime() || 0;
+    return logUser === normalizedTarget && ms >= sinceMs && ms < untilMs;
   });
   if (!selectedLogs.length) return;
   try {
