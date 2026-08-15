@@ -237,8 +237,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!todo || typeof todo !== 'object') return null;
     const text = sanitizePlainText(todo.text || todo.title || '', 200);
     if (!text) return null;
-    const createdAt = Number(todo.createdAt ?? todo.created_at) || Date.now();
-    const updatedAt = Number(todo.updatedAt ?? todo.updated_at) || createdAt;
+    const createdAt = Number(todo.createdAt !== undefined && todo.createdAt !== null ? todo.createdAt : todo.created_at) || Date.now();
+    const updatedAt = Number(todo.updatedAt !== undefined && todo.updatedAt !== null ? todo.updatedAt : todo.updated_at) || createdAt;
     const rawId = sanitizePlainText(todo.id || '', 80);
     const id = rawId || `${createdAt}-${fallbackIndex}`;
     const rawStatus = sanitizePlainText(todo.status || '', 20).toLowerCase();
@@ -248,7 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
       .filter(Boolean)
       .slice(0, 10);
     const assignedTo = sanitizePlainText(
-      todo.assignedTo ?? todo.assigned_to ?? todo.assignedToDisplay ?? todo.assigned_to_display ?? '',
+      todo.assignedTo !== undefined && todo.assignedTo !== null ? todo.assignedTo : (todo.assigned_to !== undefined && todo.assigned_to !== null ? todo.assigned_to : (todo.assignedToDisplay !== undefined && todo.assignedToDisplay !== null ? todo.assignedToDisplay : (todo.assigned_to_display !== undefined && todo.assigned_to_display !== null ? todo.assigned_to_display : ''))),
       80
     );
     return {
@@ -262,13 +262,13 @@ document.addEventListener('DOMContentLoaded', () => {
       priority: priorityOptions.includes(normalizePriority(todo.priority)) ? normalizePriority(todo.priority) : 'med',
       departments: normalizeDepartments(todo.departments, todo.department),
       department: sanitizePlainText(todo.department || '', 60),
-      dueAt: normalizeDueAt(todo.dueAt ?? todo.due_at),
+      dueAt: normalizeDueAt(todo.dueAt !== undefined && todo.dueAt !== null ? todo.dueAt : todo.due_at),
       tags,
       attachments: normalizeAttachments(todo.attachments),
       description: sanitizePlainText(todo.description || '', 2000),
       recurrence: normalizeRecurrence(todo.recurrence),
       sprintId: sanitizePlainText(todo.sprintId || todo.sprint_id || '', 40),
-      dependsOn: normalizeDependsOn(todo.dependsOn ?? todo.depends_on, id),
+      dependsOn: normalizeDependsOn(todo.dependsOn !== undefined && todo.dependsOn !== null ? todo.dependsOn : todo.depends_on, id),
       assignedTo: assignedTo || null,
       isBacklog: rawStatus === 'backlog' || Boolean(todo.isBacklog)
     };
@@ -606,7 +606,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const departments = normalizeDepartments(source.departments, source.department);
     const updatedAt = Number(source.updatedAt) || Date.now();
     const statusToSync = syncStatuses.includes(source.status) ? source.status : 'todo';
-    const assignedTo = sanitizePlainText(source.assignedTo ?? source.assigned_to ?? '', 80);
+    const assignedTo = sanitizePlainText(source.assignedTo !== undefined && source.assignedTo !== null ? source.assignedTo : (source.assigned_to !== undefined && source.assigned_to !== null ? source.assigned_to : ''), 80);
     return {
       id: sanitizePlainText(source.id || '', 80),
       title: sanitizePlainText(source.text || source.title || '', 200),
@@ -616,9 +616,9 @@ document.addEventListener('DOMContentLoaded', () => {
       due_at: normalizeDueAt(source.dueAt),
       tags: (Array.isArray(source.tags) ? source.tags : []).map((tag) => normalizeTag(tag)).filter(Boolean).slice(0, 10),
       attachments: normalizeAttachments(source.attachments),
-      sprint_id: sanitizePlainText(source.sprintId ?? source.sprint_id ?? '', 80),
+      sprint_id: sanitizePlainText(source.sprintId !== undefined && source.sprintId !== null ? source.sprintId : (source.sprint_id !== undefined && source.sprint_id !== null ? source.sprint_id : ''), 80),
       recurrence: normalizeRecurrence(source.recurrence),
-      depends_on: normalizeDependsOn(source.dependsOn ?? source.depends_on, source.id),
+      depends_on: normalizeDependsOn(source.dependsOn !== undefined && source.dependsOn !== null ? source.dependsOn : source.depends_on, source.id),
       assigned_to: assignedTo || null,
       assigned_to_display: assignedTo || null,
       departments,
@@ -699,19 +699,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function normalizeRealtimeCard(cardInput) {
     if (!cardInput || typeof cardInput !== 'object') return null;
-    const incomingUpdatedAt = toNumberOrZero(cardInput.updated_at ?? cardInput.updatedAt) || Date.now();
-    const incomingCreatedAt = toNumberOrZero(cardInput.created_at ?? cardInput.createdAt) || incomingUpdatedAt;
+    const incomingUpdatedAt = toNumberOrZero(cardInput.updated_at !== undefined && cardInput.updated_at !== null ? cardInput.updated_at : cardInput.updatedAt) || Date.now();
+    const incomingCreatedAt = toNumberOrZero(cardInput.created_at !== undefined && cardInput.created_at !== null ? cardInput.created_at : cardInput.createdAt) || incomingUpdatedAt;
     const normalizedList = normalizeTodoList([{
       ...cardInput,
       text: cardInput.title || cardInput.text || '',
-      dueAt: cardInput.due_at ?? cardInput.dueAt,
-      sprintId: cardInput.sprint_id ?? cardInput.sprintId,
+      dueAt: cardInput.due_at !== undefined && cardInput.due_at !== null ? cardInput.due_at : cardInput.dueAt,
+      sprintId: cardInput.sprint_id !== undefined && cardInput.sprint_id !== null ? cardInput.sprint_id : cardInput.sprintId,
       updatedAt: incomingUpdatedAt,
       createdAt: incomingCreatedAt,
       recurrence: cardInput.recurrence && typeof cardInput.recurrence === 'object'
         ? cardInput.recurrence
         : { type: 'none', lastTrigger: 0 },
-      dependsOn: cardInput.depends_on ?? cardInput.dependsOn,
+      dependsOn: cardInput.depends_on !== undefined && cardInput.depends_on !== null ? cardInput.depends_on : cardInput.dependsOn,
       isBacklog: String(cardInput.status || '').toLowerCase() === 'backlog'
     }]);
     return normalizedList[0] || null;
@@ -736,7 +736,7 @@ document.addEventListener('DOMContentLoaded', () => {
     cards.forEach((incomingCard) => {
       const incomingId = sanitizePlainText(incomingCard && incomingCard.id ? incomingCard.id : '', 80);
       if (!incomingId) return;
-      const incomingUpdatedAt = toNumberOrZero(incomingCard.updated_at ?? incomingCard.updatedAt);
+      const incomingUpdatedAt = toNumberOrZero(incomingCard.updated_at !== undefined && incomingCard.updated_at !== null ? incomingCard.updated_at : incomingCard.updatedAt);
       const existingIndex = nextTodos.findIndex((todo) => todo.id === incomingId);
       const existingUpdatedAt = existingIndex >= 0 ? (Number(nextTodos[existingIndex].updatedAt) || 0) : 0;
       if (existingIndex >= 0 && incomingUpdatedAt > 0 && incomingUpdatedAt <= existingUpdatedAt) return;
@@ -848,7 +848,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const normalizedCards = normalizeTodoList(cards.map((card) => ({
         ...card,
         text: card.title || card.text || '',
-        updatedAt: Number(card.updated_at ?? card.updatedAt) || Date.now(),
+        updatedAt: Number(card.updated_at !== undefined && card.updated_at !== null ? card.updated_at : card.updatedAt) || Date.now(),
         deleted: Number(card.deleted) ? 1 : 0
       })));
       const targetDepartment = normalizeSearchText(activeDepartment);

@@ -32,11 +32,11 @@ async function api(path, options = {}) {
 }
 
 function esc(v) {
-  return String(v ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  return String(v !== undefined && v !== null ? v : '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
 function normalizeText(v) {
-  return String(v ?? '')
+  return String(v !== undefined && v !== null ? v : '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()

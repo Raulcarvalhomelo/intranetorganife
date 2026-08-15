@@ -269,7 +269,12 @@ function setupEventListeners() {
   // Refresh data
   document.getElementById('refreshData').addEventListener('click', loadAdminData);
   document.getElementById('toggleTabsMenu').addEventListener('click', () => {
-    const isExpanded = document.getElementById('tabsContainer')?.classList.contains('expanded');
+    const tabsContainer = document.getElementById('tabsContainer');
+    const isExpanded = Boolean(
+      tabsContainer && tabsContainer.classList
+      && typeof tabsContainer.classList.contains === 'function'
+      && tabsContainer.classList.contains('expanded')
+    );
     setTabsMenuExpanded(!isExpanded);
   });
 

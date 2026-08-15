@@ -1774,7 +1774,7 @@ function initTodos() {
       const normalizedCards = normalizeTodoList(cards.map((card) => ({
         ...card,
         text: card.title || card.text || '',
-        updatedAt: Number(card.updated_at ?? card.updatedAt) || Date.now(),
+        updatedAt: Number(card.updated_at !== undefined && card.updated_at !== null ? card.updated_at : card.updatedAt) || Date.now(),
         deleted: Number(card.deleted) ? 1 : 0
       })));
       const targetDepartment = normalizeSearchText(activeDepartment);

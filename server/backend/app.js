@@ -397,7 +397,7 @@ function normalizeKanbanCardInput(input, fallbackUpdatedAt = Date.now()) {
       : (
         source.assignedTo !== undefined && source.assignedTo !== null
           ? source.assignedTo
-          : (source.assigned_to_display ?? source.assignedToDisplay)
+          : ((source.assigned_to_display !== undefined && source.assigned_to_display !== null ? source.assigned_to_display : source.assignedToDisplay))
       ),
     80
   );
