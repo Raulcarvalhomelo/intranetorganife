@@ -30,3 +30,9 @@ Cargo.lock
 *.sln
 *.sw?
 **/native
+
+# Operational runtime data
+server/database/kanban.db
+server/database/logs/*.ndjson
+server/database/snapshots/
+server/database/runtime-state.json

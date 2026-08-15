@@ -5,11 +5,12 @@ const express = require('express');
 const cors = require('cors');
 const initSqlJs = require('sql.js');
 const { read, write } = require('./state');
+const { createRealtimeServer } = require('./realtime');
+const { createNdjsonWriter } = require('./log-store');
 
 const app = express();
 const port = Number(process.env.PORT) || 1337;
-const sseClients = new Set();
-const dashboardSseClients = new Set();
+let realtimeServer = null;
 const dashboardUser = String(process.env.DASHBOARD_USER || '').trim() || 'admin';
 const dashboardPasswordDefault = String(process.env.DASHBOARD_PASSWORD || '').trim() || 'admin123';
 const dashboardViewerUser = String(process.env.DASHBOARD_VIEW_USER || '').trim() || 'visualizacao';
@@ -23,11 +24,12 @@ const sessionSecret = String(process.env.DASHBOARD_SESSION_SECRET || crypto.rand
 const sessionCookieName = 'dashboard_session';
 const sessionTtlMs = 1000 * 60 * 60 * 12;
 const sessionCookieSecure = process.env.DASHBOARD_COOKIE_SECURE === '1';
-const databaseDir = path.join(__dirname, '../database');
+const databaseDir = process.env.ORGANIFE_DATABASE_DIR || path.join(__dirname, '../database');
 const logsDir = path.join(databaseDir, 'logs');
 const kanbanDatabasePath = path.join(databaseDir, 'kanban.db');
 const LOG_RETENTION_DAYS = Math.max(1, Number(process.env.LOG_RETENTION_DAYS) || 3);
 const LOG_FLUSH_INTERVAL_MS = Math.max(200, Number(process.env.LOG_FLUSH_INTERVAL_MS) || 1000);
+const logWriter = createNdjsonWriter(logsDir);
 let logWriteQueue = [];
 let logFlushTimer = null;
 let logFlushInProgress = false;
@@ -46,9 +48,7 @@ function emitUpdate(kind = 'all', extra = null) {
   const mergedPayload = extra && typeof extra === 'object'
     ? { ...basePayload, ...extra }
     : basePayload;
-  const payload = `data: ${JSON.stringify(mergedPayload)}\n\n`;
-  sseClients.forEach((res) => res.write(payload));
-  dashboardSseClients.forEach((res) => res.write(payload));
+  if (realtimeServer) realtimeServer.broadcast({ type: 'state_update', payload: mergedPayload });
 }
 
 function parseJsonSafe(value, fallback) {
@@ -229,7 +229,7 @@ function queueLog(item) {
     dayKey,
     line: `${JSON.stringify(normalized)}\n`
   });
-  scheduleLogFlush();
+  scheduleLogFlush(logWriteQueue.length >= 50 ? 0 : LOG_FLUSH_INTERVAL_MS);
   return normalized;
 }
 
@@ -265,7 +265,7 @@ async function flushLogQueue() {
       grouped.set(entry.dayKey, `${current}${entry.line}`);
     });
     for (const [dayKey, content] of grouped.entries()) {
-      await fs.promises.appendFile(getLogFilePath(dayKey), content, 'utf8');
+      await logWriter.append(dayKey, content);
     }
     await cleanupOldLogFiles();
   } catch {
@@ -1039,7 +1039,7 @@ function requireDashboardAuth(req, res, next) {
     return next();
   }
   const pathText = String(req.path || '');
-  if (pathText.includes('/dashboard/api/') || pathText.endsWith('/dashboard/updates') || pathText === '/updates') {
+  if (pathText.includes('/dashboard/api/')) {
     return res.status(401).json({ message: 'nao-autorizado' });
   }
   return res.redirect('/dashboard/login');
@@ -1074,26 +1074,6 @@ app.post('/settings', (req, res) => {
   write(state);
   emitUpdate('settings');
   res.json(state.settings);
-});
-
-app.get('/settings/updates', (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-  sseClients.add(res);
-  res.write(`data: ${JSON.stringify({ updated: true, kind: 'bootstrap', at: new Date().toISOString() })}\n\n`);
-  req.on('close', () => sseClients.delete(res));
-});
-
-app.get('/dashboard/updates', requireDashboardAuth, (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-  dashboardSseClients.add(res);
-  res.write(`data: ${JSON.stringify({ updated: true, kind: 'bootstrap', at: new Date().toISOString() })}\n\n`);
-  req.on('close', () => dashboardSseClients.delete(res));
 });
 
 app.post('/release-requests', (req, res) => {
@@ -1648,7 +1628,7 @@ app.get('/', (req, res) => {
 });
 
 async function initializeLogStore() {
-  await fs.promises.mkdir(logsDir, { recursive: true });
+  await logWriter.ensureDirectory();
   await migrateLegacyLogsFromRuntimeState();
   await cleanupOldLogFiles();
   setInterval(() => {
@@ -1662,7 +1642,18 @@ Promise.all([
 ])
   .catch(() => {})
   .finally(() => {
-    app.listen(port, '0.0.0.0', () => {
+    const http = require('http');
+    const httpServer = http.createServer(app);
+    realtimeServer = createRealtimeServer(httpServer, {
+      onMessage: (socket, message) => {
+        if (message.type === 'logs_batch' && Array.isArray(message.logs)) {
+          message.logs.forEach((item) => queueLog(item));
+          realtimeServer.send(socket, { type: 'logs_ack', count: message.logs.length });
+          emitUpdate('logs');
+        }
+      }
+    });
+    httpServer.listen(port, '0.0.0.0', () => {
       process.stdout.write(`Server running on http://0.0.0.0:${port}\n`);
     });
   });

@@ -8,7 +8,6 @@
     "POST /dashboard/login",
     "POST /dashboard/logout",
     "GET /dashboard/",
-    "GET /dashboard/updates",
     "GET /dashboard/api/health",
     "GET /dashboard/api/settings",
     "POST /dashboard/api/settings",
@@ -26,7 +25,6 @@
   "extension": [
     "GET /settings",
     "POST /settings",
-    "GET /settings/updates",
     "POST /release-requests",
     "GET /release-requests",
     "POST /release-requests/:id/block",

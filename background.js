@@ -205,7 +205,7 @@ async function loadSettingsFromServer() {
       const normalizedServerFromSettings = normalizeServerUrl(settingsFromJson.serverUrl);
       if (normalizedServerFromSettings && normalizedServerFromSettings !== serverUrl) {
         serverUrl = normalizedServerFromSettings;
-        setupSSE();
+        setupWebSocket();
       }
       
       currentSettings = settingsFromJson;
@@ -486,63 +486,43 @@ async function clearAllActivityLogs() {
 void clearLegacyActivityLogsFromStorage();
 void maybeCleanupActivityLogs(true);
 
-let settingsEventSource = null;
-let sseRetryTimer = null;
-
-function setupSSE() {
-  if (sseRetryTimer) {
-    clearTimeout(sseRetryTimer);
-    sseRetryTimer = null;
-  }
-  if (settingsEventSource) {
-    try {
-      settingsEventSource.close();
-    } catch {}
-  }
-  settingsEventSource = null;
-  if (!serverUrl || typeof EventSource !== 'function') return;
+let settingsWebSocket = null;
+let wsRetryTimer = null;
+let wsRetryDelay = 1000;
+function setupWebSocket() {
+  if (wsRetryTimer) { clearTimeout(wsRetryTimer); wsRetryTimer = null; }
+  if (settingsWebSocket) { try { settingsWebSocket.close(); } catch (error) {} }
+  settingsWebSocket = null;
+  if (!serverUrl || typeof WebSocket !== 'function') return;
   try {
-    const sseUrl = `${String(serverUrl).replace(/\/$/, '')}/settings/updates`;
-    settingsEventSource = new EventSource(sseUrl);
-    settingsEventSource.onmessage = async (event) => {
-      let payload = {};
-      try {
-        payload = JSON.parse(String(event.data || '{}'));
-      } catch {}
-      if (!payload || !payload.updated) return;
+    const wsUrl = `${String(serverUrl).replace(/^http/, 'ws').replace(/\/$/, '')}/ws`;
+    settingsWebSocket = new WebSocket(wsUrl);
+    settingsWebSocket.onopen = () => {
+      wsRetryDelay = 1000;
+      settingsWebSocket.send(JSON.stringify({ type: 'hello', client: 'extension' }));
+    };
+    settingsWebSocket.onmessage = async (event) => {
+      let message = {};
+      try { message = JSON.parse(String(event.data || '{}')); } catch (error) { return; }
+      const payload = message.payload || {};
+      if (!payload.updated) return;
       if (String(payload.kind || '').toLowerCase() === 'kanban' && String(payload.channel || '').toLowerCase() === 'kanban') {
-        await storageLocalSetAsync({
-          [KANBAN_REALTIME_DELTA_KEY]: {
-            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            payload
-          }
-        });
+        await storageLocalSetAsync({ [KANBAN_REALTIME_DELTA_KEY]: { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, payload } });
         return;
       }
       await loadSettingsFromServer();
     };
-    settingsEventSource.onerror = () => {
-      if (settingsEventSource) {
-        try {
-          settingsEventSource.close();
-        } catch {}
-      }
-      settingsEventSource = null;
-      if (sseRetryTimer) clearTimeout(sseRetryTimer);
-      sseRetryTimer = setTimeout(() => {
-        setupSSE();
-      }, 3000);
+    settingsWebSocket.onerror = () => { try { settingsWebSocket.close(); } catch (error) {} };
+    settingsWebSocket.onclose = () => {
+      settingsWebSocket = null;
+      wsRetryTimer = setTimeout(setupWebSocket, wsRetryDelay);
+      wsRetryDelay = Math.min(wsRetryDelay * 2, 30000);
     };
-  } catch {
-    if (sseRetryTimer) clearTimeout(sseRetryTimer);
-    sseRetryTimer = setTimeout(() => {
-      setupSSE();
-    }, 3000);
+  } catch (error) {
+    wsRetryTimer = setTimeout(setupWebSocket, wsRetryDelay);
+    wsRetryDelay = Math.min(wsRetryDelay * 2, 30000);
   }
 }
-
-setupSSE();
-
 browserAPI.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   let shouldRebuildPatterns = false;
@@ -563,7 +543,7 @@ browserAPI.storage.onChanged.addListener((changes, area) => {
   }
   if (changes.serverUrl) {
     serverUrl = normalizeServerUrl(changes.serverUrl.newValue) || serverUrl;
-    setupSSE();
+    setupWebSocket();
   }
 });
 
@@ -574,14 +554,14 @@ if (browserAPI.alarms && browserAPI.alarms.onAlarm) {
 browserAPI.runtime.onStartup.addListener(() => {
   if (!browserUserLoaded) loadSettingsFromStorage();
   loadSettingsFromServer();
-  setupSSE();
+  setupWebSocket();
   enforceIdentityAcrossTabs();
 });
 
 browserAPI.runtime.onInstalled.addListener(() => {
   if (!browserUserLoaded) loadSettingsFromStorage();
   loadSettingsFromServer();
-  setupSSE();
+  setupWebSocket();
   enforceIdentityAcrossTabs();
 });
 
@@ -868,7 +848,7 @@ function applySettingsFromDashboard(settings) {
   const normalizedServerFromSettings = normalizeServerUrl(settings.serverUrl);
   if (normalizedServerFromSettings && normalizedServerFromSettings !== serverUrl) {
     serverUrl = normalizedServerFromSettings;
-    setupSSE();
+    setupWebSocket();
   }
   browserAPI.storage.local.set({
     adminPassword,
@@ -1029,7 +1009,7 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
         serverUrl = normalized;
         browserAPI.storage.local.set({ serverUrl });
-        setupSSE();
+        setupWebSocket();
         sendResponse({ success: true, serverUrl });
       }
       break;
@@ -1197,7 +1177,7 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
           browserUser,
           companyNotice
         }, () => {
-          setupSSE();
+          setupWebSocket();
           sendResponse({ success: true });
         });
         return true;

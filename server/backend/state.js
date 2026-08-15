@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const dataDir = path.join(__dirname, '../database');
+const dataDir = process.env.ORGANIFE_DATABASE_DIR || path.join(__dirname, '../database');
 const dataFile = path.join(dataDir, 'runtime-state.json');
 
 const defaults = {
