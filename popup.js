@@ -459,22 +459,40 @@ function loadAdminData() {
   loadStats();
 }
 
-// Save blocked sites
-function saveBlockedSites() {
-  const sites = document.getElementById('blockedSites').value.split('\n').filter(Boolean);
-  const keywords = document.getElementById('blockedKeywords').value.split('\n').filter(Boolean);
-  const links = document.getElementById('allowedLinks').value.split('\n').filter(Boolean);
-  const domains = document.getElementById('allowedDomains').value.split('\n').filter(Boolean);
-  const tempLinks = document.getElementById('tempAllowedLinks').value.split('\n').filter(Boolean);
+function readBlockingEntries(id) {
+  return String(document.getElementById(id).value || '')
+    .split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
 
-  browserAPI.runtime.sendMessage({ type: 'updateBlockedSites', password: currentAdminPassword, sites });
-  browserAPI.runtime.sendMessage({ type: 'updateBlockedKeywords', password: currentAdminPassword, keywords });
-  browserAPI.runtime.sendMessage({ type: 'updateAllowedLinks', password: currentAdminPassword, links });
-  browserAPI.runtime.sendMessage({ type: 'updateAllowedDomains', password: currentAdminPassword, domains });
-  browserAPI.runtime.sendMessage({ type: 'updateTempAllowedLinks', password: currentAdminPassword, links: tempLinks });
+function sendRuntimeMessageAsync(message) {
+  return new Promise((resolve) => {
+    sendRuntimeMessage(message, (response) => resolve(response || { success: false }));
+  });
+}
 
-  alert('Alteracoes salvas com sucesso');
-  loadStats();
+// Save blocked sites and keywords
+async function saveBlockedSites() {
+  const sites = readBlockingEntries('blockedSites');
+  const keywords = readBlockingEntries('blockedKeywords');
+  const links = readBlockingEntries('allowedLinks');
+  const domains = readBlockingEntries('allowedDomains');
+  const tempLinks = readBlockingEntries('tempAllowedLinks');
+  const responses = await Promise.all([
+    sendRuntimeMessageAsync({ type: 'updateBlockedSites', password: currentAdminPassword, sites }),
+    sendRuntimeMessageAsync({ type: 'updateBlockedKeywords', password: currentAdminPassword, keywords }),
+    sendRuntimeMessageAsync({ type: 'updateAllowedLinks', password: currentAdminPassword, links }),
+    sendRuntimeMessageAsync({ type: 'updateAllowedDomains', password: currentAdminPassword, domains }),
+    sendRuntimeMessageAsync({ type: 'updateTempAllowedLinks', password: currentAdminPassword, links: tempLinks })
+  ]);
+  if (responses.every((response) => response && response.success === true)) {
+    alert('Alteracoes salvas com sucesso');
+    loadStats();
+    return true;
+  }
+  alert('Nao foi possivel salvar as regras de bloqueio. Reabra a extensao e tente novamente.');
+  return false;
 }
 
 function requestActivityLogs(options = {}, callback = () => {}) {

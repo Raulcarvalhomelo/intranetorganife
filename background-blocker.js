@@ -79,12 +79,15 @@
       const expiry = temporaryAllowed.get(normalizedUrl);
       if (expiry && Date.now() < expiry) return false;
       if (expiry) temporaryAllowed.delete(normalizedUrl);
-      if ((state.allowedLinks || []).some((entry) => normalizedUrl.indexOf(String(entry || '').toLowerCase()) >= 0)) return false;
       if (matchers.blocked.some((matcher) => normalizedUrl.indexOf(matcher.raw) >= 0 || matchesPattern(host, matcher))) return true;
+      if ((state.allowedLinks || []).some((entry) => normalizedUrl.indexOf(String(entry || '').toLowerCase().trim()) >= 0)) return false;
       if (matchers.allowed.some((matcher) => matchesPattern(host, matcher))) return false;
       if (matchers.temporary.some((matcher) => normalizedUrl.indexOf(matcher.raw) >= 0 || matchesPattern(host, matcher))) return false;
       if (state.totalBlockMode) return true;
-      return (state.blockedKeywords || []).some((keyword) => normalizedUrl.indexOf(String(keyword || '').toLowerCase()) >= 0);
+      return (state.blockedKeywords || []).some((keyword) => {
+        const normalizedKeyword = String(keyword || '').trim().toLowerCase();
+        return normalizedKeyword && normalizedUrl.indexOf(normalizedKeyword) >= 0;
+      });
     }
 
     function allowTemporarily(url, expiresAt) {

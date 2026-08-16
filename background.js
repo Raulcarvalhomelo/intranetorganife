@@ -867,16 +867,16 @@ function shouldBlockUrl(url) {
     else temporaryAllowed.delete(urlLower);
   }
 
-  // Check if URL is in allowedLinks
-  if (allowedLinks.some(link => urlLower.includes(link.toLowerCase()))) return false;
-
-  // Priority: blockedSites must override allowedDomains/tempAllowedLinks
+  // Priority: an explicit blocked site must be evaluated before any generic allow-list entry.
   for (const p of blockedSitesCompiled.rawEntries) {
     if (!p) continue;
     if (urlLower.includes(p)) return true;
     if (singleDomainMatches(urlLower, p)) return true;
   }
   if (matchesCompiledDomainPatterns(urlLower, blockedSitesCompiled)) return true;
+
+  // Check if URL is in allowedLinks only after the blocked-sites list has been checked.
+  if (allowedLinks.some(link => urlLower.includes(String(link || '').toLowerCase().trim()))) return false;
 
   // Check if URL matches allowedDomains patterns (permanent)
   for (const domainPattern of allowedDomainsCompiled.rawEntries) {
@@ -896,7 +896,10 @@ function shouldBlockUrl(url) {
   if (totalBlockMode) return true;
 
   // Check for blocked keywords
-  return blockedKeywords.some(keyword => urlLower.includes(keyword.toLowerCase()));
+  return blockedKeywords.some((keyword) => {
+    const normalizedKeyword = String(keyword || '').trim().toLowerCase();
+    return normalizedKeyword && urlLower.includes(normalizedKeyword);
+  });
 }
 
 let temporaryAllowed = new Map();
@@ -1099,7 +1102,7 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     case 'updateBlockedSites':
       if (isRequestAuthorized(request, ['admin', 'restricted'])) {
-        blockedSites = request.sites;
+        blockedSites = normalizeArray(request.sites).map((entry) => String(entry || '').trim()).filter(Boolean);
         rebuildCompiledBlockingPatterns();
         browserAPI.storage.local.set({ blockedSites });
         sendResponse({ success: true });
@@ -1108,7 +1111,7 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     case 'updateBlockedKeywords':
       if (isRequestAuthorized(request, ['admin'])) {
-        blockedKeywords = request.keywords;
+        blockedKeywords = normalizeArray(request.keywords).map((entry) => String(entry || '').trim().toLowerCase()).filter(Boolean);
         browserAPI.storage.local.set({ blockedKeywords });
         sendResponse({ success: true });
       }

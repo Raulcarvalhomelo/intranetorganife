@@ -122,6 +122,25 @@ test('shouldBlockUrl: blockedSites tem prioridade sobre allowedDomains/tempAllow
   assert.equal(api.shouldBlockUrl('https://www.example.com/a'), true);
 });
 
+test('shouldBlockUrl: blockedSites vence allowedLinks', async () => {
+  const bgPath = path.resolve(__dirname, '../../../../background.js');
+  const backgroundJs = fs.readFileSync(bgPath, 'utf8');
+  const api = buildSandboxedBlockingApi(backgroundJs);
+
+  api.overrideBrasiliaHour(10);
+  api.setState({
+    blockedSites: ['example.com'],
+    allowedDomains: [],
+    tempAllowedLinks: [],
+    allowedLinks: ['https://example.com/permitido'],
+    blockedKeywords: [],
+    totalBlockMode: false,
+    browserUser: ''
+  });
+
+  assert.equal(api.shouldBlockUrl('https://example.com/permitido'), true);
+});
+
 test('shouldBlockUrl: allowedDomains permite quando não está em blockedSites', async () => {
   const bgPath = path.resolve(__dirname, '../../../../background.js');
   const backgroundJs = fs.readFileSync(bgPath, 'utf8');
@@ -216,6 +235,25 @@ test('shouldBlockUrl: totalBlockMode bloqueia tudo que não foi permitido', asyn
   });
 
   assert.equal(api.shouldBlockUrl('https://example.com/'), true);
+});
+
+test('shouldBlockUrl: normaliza palavras bloqueadas com espaços e maiúsculas', async () => {
+  const bgPath = path.resolve(__dirname, '../../../../background.js');
+  const backgroundJs = fs.readFileSync(bgPath, 'utf8');
+  const api = buildSandboxedBlockingApi(backgroundJs);
+
+  api.overrideBrasiliaHour(10);
+  api.setState({
+    blockedSites: [],
+    allowedDomains: [],
+    tempAllowedLinks: [],
+    allowedLinks: [],
+    blockedKeywords: ['  Forbidden-Keyword  '],
+    totalBlockMode: false,
+    browserUser: ''
+  });
+
+  assert.equal(api.shouldBlockUrl('https://example.com/path/forbidden-keyword'), true);
 });
 
 test('shouldBlockUrl: bloqueia por blockedKeywords', async () => {
