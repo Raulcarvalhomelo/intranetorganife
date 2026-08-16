@@ -35,4 +35,5 @@ Cargo.lock
 server/database/kanban.db
 server/database/logs/*.ndjson
 server/database/snapshots/
+server/database/*.ndjson
 server/database/runtime-state.json

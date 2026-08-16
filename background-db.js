@@ -3,9 +3,79 @@
 const LOGS_DB_NAME = 'organife-extension-db';
 const LOGS_DB_VERSION = 1;
 const LOGS_STORE_NAME = 'activityLogs';
+const LOGS_INDEX_TIMESTAMP = 'by_timestamp_ms';
+const LOGS_INDEX_ACTION = 'by_action';
 
 function getSchema() {
-  return { name: LOGS_DB_NAME, version: LOGS_DB_VERSION, store: LOGS_STORE_NAME, keyPath: 'id' };
+  return {
+    name: LOGS_DB_NAME,
+    version: LOGS_DB_VERSION,
+    store: LOGS_STORE_NAME,
+    keyPath: 'id',
+    indexes: [LOGS_INDEX_TIMESTAMP, LOGS_INDEX_ACTION]
+  };
 }
 
-if (typeof module !== 'undefined') module.exports = { getSchema };
+function createActivityDb(indexedDBApi) {
+  const api = indexedDBApi || (typeof indexedDB !== 'undefined' ? indexedDB : null);
+  let databasePromise = null;
+
+  function open() {
+    if (databasePromise) return databasePromise;
+    if (!api) return Promise.resolve(null);
+    databasePromise = new Promise((resolve) => {
+      try {
+        const request = api.open(LOGS_DB_NAME, LOGS_DB_VERSION);
+        request.onupgradeneeded = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains(LOGS_STORE_NAME)) {
+            const store = db.createObjectStore(LOGS_STORE_NAME, { keyPath: 'id' });
+            store.createIndex(LOGS_INDEX_TIMESTAMP, 'timestampMs', { unique: false });
+            store.createIndex(LOGS_INDEX_ACTION, 'action', { unique: false });
+          }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => resolve(null);
+      } catch (error) {
+        resolve(null);
+      }
+    });
+    return databasePromise;
+  }
+
+  function put(value) {
+    return open().then((db) => new Promise((resolve) => {
+      if (!db) { resolve(false); return; }
+      const transaction = db.transaction(LOGS_STORE_NAME, 'readwrite');
+      transaction.objectStore(LOGS_STORE_NAME).put(value);
+      transaction.oncomplete = () => resolve(true);
+      transaction.onerror = () => resolve(false);
+      transaction.onabort = () => resolve(false);
+    }));
+  }
+
+  function getAll() {
+    return open().then((db) => new Promise((resolve) => {
+      if (!db) { resolve([]); return; }
+      const request = db.transaction(LOGS_STORE_NAME, 'readonly').objectStore(LOGS_STORE_NAME).getAll();
+      request.onsuccess = () => resolve(Array.isArray(request.result) ? request.result : []);
+      request.onerror = () => resolve([]);
+    }));
+  }
+
+  function clear() {
+    return open().then((db) => new Promise((resolve) => {
+      if (!db) { resolve(false); return; }
+      const transaction = db.transaction(LOGS_STORE_NAME, 'readwrite');
+      transaction.objectStore(LOGS_STORE_NAME).clear();
+      transaction.oncomplete = () => resolve(true);
+      transaction.onerror = () => resolve(false);
+      transaction.onabort = () => resolve(false);
+    }));
+  }
+
+  return { open, put, getAll, clear, getSchema };
+}
+
+if (typeof globalThis !== 'undefined') globalThis.OrganifeActivityDb = { getSchema, createActivityDb };
+if (typeof module !== 'undefined') module.exports = { getSchema, createActivityDb };

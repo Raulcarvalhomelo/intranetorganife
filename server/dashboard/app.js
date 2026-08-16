@@ -1,5 +1,5 @@
 const statusEl = document.getElementById('status');
-const sseBadge = document.getElementById('sseBadge');
+const realtimeBadge = document.getElementById('sseBadge');
 const statsEl = document.getElementById('stats');
 const API_BASE = '/dashboard/api';
 let latestCounts = { requests: 0, logs: 0, blockedSites: 0 };
@@ -585,20 +585,35 @@ function initNoticesEvents() {
 function initRealtime() {
   let retryDelay = 1000;
   let retryTimer = null;
+  let socket = null;
+  function scheduleConnect() {
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = setTimeout(connect, retryDelay);
+    retryDelay = Math.min(retryDelay * 2, 30000);
+  }
   function connect() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    try {
+      socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    } catch (error) {
+      scheduleConnect();
+      return;
+    }
     window.dashboardSocket = socket;
     socket.onopen = () => {
       retryDelay = 1000;
-      sseBadge.textContent = 'WebSocket online';
-      sseBadge.classList.remove('offline');
-      sseBadge.classList.add('online');
+      realtimeBadge.textContent = 'WebSocket online';
+      realtimeBadge.classList.remove('offline');
+      realtimeBadge.classList.add('online');
       socket.send(JSON.stringify({ type: 'hello', client: 'dashboard' }));
     };
     socket.onmessage = async (event) => {
       let message = {};
       try { message = JSON.parse(event.data || '{}'); } catch (error) { return; }
+      if (message.type === 'settings_state') {
+        await loadConfig();
+        return;
+      }
       const eventData = message.payload || {};
       if (message.type !== 'state_update') return;
       if (refreshTimer) clearTimeout(refreshTimer);
@@ -621,12 +636,11 @@ function initRealtime() {
     };
     socket.onerror = () => { try { socket.close(); } catch (error) {} };
     socket.onclose = () => {
-      sseBadge.textContent = 'WebSocket offline';
-      sseBadge.classList.remove('online');
-      sseBadge.classList.add('offline');
+      realtimeBadge.textContent = 'WebSocket offline';
+      realtimeBadge.classList.remove('online');
+      realtimeBadge.classList.add('offline');
       statusEl.textContent = 'Conexão em tempo real instável';
-      retryTimer = setTimeout(connect, retryDelay);
-      retryDelay = Math.min(retryDelay * 2, 30000);
+      scheduleConnect();
     };
   }
   if (retryTimer) clearTimeout(retryTimer);

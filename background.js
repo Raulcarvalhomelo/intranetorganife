@@ -1,4 +1,6 @@
 // Browser compatibility layer
+if (typeof importScripts === 'function') importScripts('background-blocker.js', 'background-id.js', 'background-tracker.js', 'background-db.js', 'background-ws.js');
+
 const browserAPI = (typeof browser !== 'undefined' ? browser : chrome);
 
 let serverUrl = 'http://192.168.100.34:1337';
@@ -227,7 +229,7 @@ async function loadSettingsFromServer() {
         serverUrl
       });
       
-      chrome.runtime.sendMessage({ type: 'settingsUpdated', settings: currentSettings });
+      browserAPI.runtime.sendMessage({ type: 'settingsUpdated', settings: currentSettings });
     }
   } catch (error) {
     console.error('Error loading settings from server:', error);
@@ -489,6 +491,40 @@ void maybeCleanupActivityLogs(true);
 let settingsWebSocket = null;
 let wsRetryTimer = null;
 let wsRetryDelay = 1000;
+let wsLogBatch = [];
+let wsLogFlushTimer = null;
+
+function scheduleWsLogFlush() {
+  if (wsLogFlushTimer || !wsLogBatch.length) return;
+  wsLogFlushTimer = setTimeout(() => {
+    wsLogFlushTimer = null;
+    flushWsLogBatch();
+  }, 30000);
+}
+
+function flushWsLogBatch() {
+  if (!settingsWebSocket || settingsWebSocket.readyState !== 1 || !wsLogBatch.length) {
+    scheduleWsLogFlush();
+    return false;
+  }
+  const batch = wsLogBatch.splice(0, 50);
+  try {
+    settingsWebSocket.send(JSON.stringify({ type: 'logs_batch', logs: batch }));
+    if (wsLogBatch.length) flushWsLogBatch();
+    return true;
+  } catch (error) {
+    wsLogBatch = batch.concat(wsLogBatch);
+    return false;
+  }
+}
+
+function queueWsLog(log) {
+  if (!log) return;
+  wsLogBatch.push(log);
+  if (wsLogBatch.length >= 50) flushWsLogBatch();
+  else scheduleWsLogFlush();
+}
+
 function setupWebSocket() {
   if (wsRetryTimer) { clearTimeout(wsRetryTimer); wsRetryTimer = null; }
   if (settingsWebSocket) { try { settingsWebSocket.close(); } catch (error) {} }
@@ -500,10 +536,15 @@ function setupWebSocket() {
     settingsWebSocket.onopen = () => {
       wsRetryDelay = 1000;
       settingsWebSocket.send(JSON.stringify({ type: 'hello', client: 'extension' }));
+      flushWsLogBatch();
     };
     settingsWebSocket.onmessage = async (event) => {
       let message = {};
       try { message = JSON.parse(String(event.data || '{}')); } catch (error) { return; }
+      if (message.type === 'settings_state') {
+        applySettingsFromDashboard(message.payload || {});
+        return;
+      }
       const payload = message.payload || {};
       if (!payload.updated) return;
       if (String(payload.kind || '').toLowerCase() === 'kanban' && String(payload.channel || '').toLowerCase() === 'kanban') {
@@ -585,8 +626,7 @@ async function logActivity(action, details) {
     details
   };
   await appendActivityLog(log);
-
-  // Send to server
+  queueWsLog(log);
   return log;
 }
 

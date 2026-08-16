@@ -1,4 +1,4 @@
-const browserAPI = (typeof browser !== 'undefined' ? browser : chrome);
+const browserAPI = typeof browser !== 'undefined' ? browser : (typeof chrome !== 'undefined' ? chrome : null);
 const THEME_STORAGE_KEY = 'themeMode';
 const KANBAN_SHOW_BACKLOG_KEY = 'kanbanShowBacklog';
 const KANBAN_REALTIME_DELTA_KEY = 'kanbanRealtimeDelta';
@@ -234,43 +234,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function normalizeTodo(todo, fallbackIndex = 0) {
-    if (!todo || typeof todo !== 'object') return null;
-    const text = sanitizePlainText(todo.text || todo.title || '', 200);
-    if (!text) return null;
-    const createdAt = Number(todo.createdAt !== undefined && todo.createdAt !== null ? todo.createdAt : todo.created_at) || Date.now();
-    const updatedAt = Number(todo.updatedAt !== undefined && todo.updatedAt !== null ? todo.updatedAt : todo.updated_at) || createdAt;
-    const rawId = sanitizePlainText(todo.id || '', 80);
-    const id = rawId || `${createdAt}-${fallbackIndex}`;
-    const rawStatus = sanitizePlainText(todo.status || '', 20).toLowerCase();
-    const status = statuses.includes(rawStatus) ? rawStatus : (todo.completed ? 'done' : 'todo');
-    const tags = (Array.isArray(todo.tags) ? todo.tags : [])
-      .map((tag) => normalizeTag(tag))
-      .filter(Boolean)
-      .slice(0, 10);
-    const assignedTo = sanitizePlainText(
-      todo.assignedTo !== undefined && todo.assignedTo !== null ? todo.assignedTo : (todo.assigned_to !== undefined && todo.assigned_to !== null ? todo.assigned_to : (todo.assignedToDisplay !== undefined && todo.assignedToDisplay !== null ? todo.assignedToDisplay : (todo.assigned_to_display !== undefined && todo.assigned_to_display !== null ? todo.assigned_to_display : ''))),
-      80
-    );
+    if (!todo || typeof todo !== 'object' || !KanbanAPI || !KanbanAPI.utils || typeof KanbanAPI.utils.normalizeTodo !== 'function') return null;
+    const normalized = KanbanAPI.utils.normalizeTodo(Object.assign({}, todo, { text: todo.text || todo.title }), fallbackIndex);
+    if (!normalized) return null;
+    const id = sanitizePlainText(todo.id || normalized.id, 80) || normalized.id;
     return {
+      ...normalized,
       id,
-      text,
-      completed: status === 'done',
-      createdAt,
-      updatedAt,
       deleted: Number(todo.deleted) ? 1 : 0,
-      status,
-      priority: priorityOptions.includes(normalizePriority(todo.priority)) ? normalizePriority(todo.priority) : 'med',
-      departments: normalizeDepartments(todo.departments, todo.department),
-      department: sanitizePlainText(todo.department || '', 60),
-      dueAt: normalizeDueAt(todo.dueAt !== undefined && todo.dueAt !== null ? todo.dueAt : todo.due_at),
-      tags,
-      attachments: normalizeAttachments(todo.attachments),
-      description: sanitizePlainText(todo.description || '', 2000),
-      recurrence: normalizeRecurrence(todo.recurrence),
-      sprintId: sanitizePlainText(todo.sprintId || todo.sprint_id || '', 40),
+      completed: normalized.status === 'done',
       dependsOn: normalizeDependsOn(todo.dependsOn !== undefined && todo.dependsOn !== null ? todo.dependsOn : todo.depends_on, id),
-      assignedTo: assignedTo || null,
-      isBacklog: rawStatus === 'backlog' || Boolean(todo.isBacklog)
+      assignedTo: sanitizePlainText(todo.assignedTo !== undefined && todo.assignedTo !== null ? todo.assignedTo : (todo.assigned_to || ''), 80) || null,
+      isBacklog: normalized.status === 'backlog' || Boolean(todo.isBacklog)
     };
   }
 

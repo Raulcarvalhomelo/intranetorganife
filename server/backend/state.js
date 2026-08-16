@@ -1,12 +1,12 @@
+'use strict';
+
 const fs = require('fs');
 const path = require('path');
 
-const dataDir = process.env.ORGANIFE_DATABASE_DIR || path.join(__dirname, '../database');
-const dataFile = path.join(dataDir, 'runtime-state.json');
-
-const defaults = {
+const defaultState = {
   auth: {
-    dashboardPassword: ''
+    dashboardPassword: '',
+    dashboardViewerPassword: ''
   },
   settings: {
     adminPassword: '',
@@ -32,36 +32,59 @@ const defaults = {
   logs: []
 };
 
-function ensure() {
-  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-  if (!fs.existsSync(dataFile)) fs.writeFileSync(dataFile, JSON.stringify(defaults, null, 2), 'utf8');
+function cloneDefaultState() {
+  return JSON.parse(JSON.stringify(defaultState));
 }
 
-function read() {
-  ensure();
-  try {
-    const raw = fs.readFileSync(dataFile, 'utf8');
-    const parsed = JSON.parse(raw);
-    return {
-      auth: { ...defaults.auth, ...(parsed.auth || {}) },
-      settings: { ...defaults.settings, ...(parsed.settings || {}) },
-      releaseRequests: Array.isArray(parsed.releaseRequests) ? parsed.releaseRequests : [],
-      logs: Array.isArray(parsed.logs) ? parsed.logs : []
-    };
-  } catch {
-    return JSON.parse(JSON.stringify(defaults));
+function createStateStore(options) {
+  const config = options || {};
+  const dataDir = path.resolve(String(config.dataDir || process.env.ORGANIFE_DATABASE_DIR || path.join(__dirname, '../database')));
+  const dataFile = path.resolve(String(config.dataFile || path.join(dataDir, 'runtime-state.json')));
+
+  function ensure() {
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    if (!fs.existsSync(dataFile)) fs.writeFileSync(dataFile, JSON.stringify(defaultState, null, 2), 'utf8');
   }
+
+  function read() {
+    ensure();
+    try {
+      const raw = fs.readFileSync(dataFile, 'utf8');
+      const parsed = JSON.parse(raw);
+      return {
+        auth: Object.assign({}, defaultState.auth, parsed.auth || {}),
+        settings: Object.assign({}, defaultState.settings, parsed.settings || {}),
+        releaseRequests: Array.isArray(parsed.releaseRequests) ? parsed.releaseRequests : [],
+        logs: Array.isArray(parsed.logs) ? parsed.logs : []
+      };
+    } catch (error) {
+      return cloneDefaultState();
+    }
+  }
+
+  function write(state) {
+    ensure();
+    const current = state && typeof state === 'object' ? state : {};
+    const nextState = {
+      auth: current.auth && typeof current.auth === 'object' ? current.auth : defaultState.auth,
+      settings: current.settings && typeof current.settings === 'object' ? current.settings : defaultState.settings,
+      releaseRequests: Array.isArray(current.releaseRequests) ? current.releaseRequests : [],
+      logs: []
+    };
+    const tempFile = `${dataFile}.tmp`;
+    fs.writeFileSync(tempFile, JSON.stringify(nextState, null, 2), 'utf8');
+    fs.renameSync(tempFile, dataFile);
+  }
+
+  return { dataDir, dataFile, ensure, read, write };
 }
 
-function write(state) {
-  ensure();
-  const nextState = {
-    auth: state && state.auth ? state.auth : defaults.auth,
-    settings: state && state.settings ? state.settings : defaults.settings,
-    releaseRequests: Array.isArray(state && state.releaseRequests) ? state.releaseRequests : [],
-    logs: []
-  };
-  fs.writeFileSync(dataFile, JSON.stringify(nextState, null, 2), 'utf8');
-}
+const defaultStore = createStateStore();
 
-module.exports = { read, write };
+module.exports = {
+  createStateStore,
+  defaults: defaultState,
+  ensure: defaultStore.ensure,
+  read: defaultStore.read,
+  write: defaultStore.write
+};

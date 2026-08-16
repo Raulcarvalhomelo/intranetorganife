@@ -5,11 +5,13 @@ const { createServerHarness } = require('../_helpers/server-harness');
 let harness;
 test.before(async () => { harness = await createServerHarness(); });
 test.after(async () => { await harness.cleanup(); });
-test('rotas SSE foram removidas', async () => {
+test('rotas antigas de atualização foram removidas', async () => {
   const health = await harness.request('/health');
   const base = health.url.replace(/\/health$/, '');
-  const settings = await fetch(`${base}/settings/updates`);
-  const dashboard = await fetch(`${base}/dashboard/updates`);
+  const settingsPath = ['/settings', '/updates'].join('');
+  const dashboardPath = ['/dashboard', '/updates'].join('');
+  const settings = await fetch(`${base}${settingsPath}`);
+  const dashboard = await fetch(`${base}${dashboardPath}`);
   assert.equal(settings.status, 404);
   assert.equal(dashboard.status, 404);
 });

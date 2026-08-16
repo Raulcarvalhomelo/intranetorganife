@@ -1,7 +1,9 @@
 // kanban-core.js
 
 const KanbanAPI = (function() {
-  const browserAPI = (typeof browser !== 'undefined' ? browser : chrome);
+  const browserAPI = typeof browser !== 'undefined'
+    ? browser
+    : (typeof chrome !== 'undefined' ? chrome : null);
   const statuses = ['backlog', 'todo', 'doing', 'done'];
   const priorityOptions = ['low', 'med', 'high', 'urgent'];
   const departmentOptions = ['Fiscal', 'DP', 'Recepção', 'Contabil', 'Legal', 'Administrativo'];
@@ -337,4 +339,7 @@ const KanbanAPI = (function() {
     }
   };
 })();
+
+if (typeof globalThis !== 'undefined') globalThis.KanbanAPI = KanbanAPI;
+if (typeof module !== 'undefined') module.exports = KanbanAPI;
 
