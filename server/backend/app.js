@@ -16,7 +16,10 @@ const { createLogsRouter } = require('./routes/logs');
 const { createKanbanRouter } = require('./routes/kanban');
 
 const config = loadConfig();
-const stateStore = createStateStore({ dataDir: config.databaseDir });
+const stateStore = createStateStore({
+  dataDir: config.databaseDir,
+  extensionAdminPasswordDefault: config.extensionAdminPasswordDefault
+});
 const authService = createAuthService({
   stateStore,
   dashboardUser: config.dashboardUser,

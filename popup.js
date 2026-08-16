@@ -343,8 +343,16 @@ function setupEventListeners() {
 
 // Handle login
 function handleLogin() {
-  const password = document.getElementById('adminPassword').value;
+  const password = String(document.getElementById('adminPassword').value || '').trim();
+  if (!password) {
+    alert('Digite a senha de administrador');
+    return;
+  }
   browserAPI.runtime.sendMessage({ type: 'verifyPassword', password }, (response) => {
+    if (browserAPI.runtime.lastError) {
+      alert('Não foi possível validar a senha. Reabra a extensão e tente novamente.');
+      return;
+    }
     if (response && response.isValid) {
       isAdmin = true;
       currentAccessRole = response.role === 'restricted' ? 'restricted' : 'admin';

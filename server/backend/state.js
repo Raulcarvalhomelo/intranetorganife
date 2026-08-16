@@ -9,7 +9,7 @@ const defaultState = {
     dashboardViewerPassword: ''
   },
   settings: {
-    adminPassword: '',
+    adminPassword: 'admin',
     restrictedPassword: '',
     tempPassword: '',
     companyName: 'Organife',
@@ -40,10 +40,15 @@ function createStateStore(options) {
   const config = options || {};
   const dataDir = path.resolve(String(config.dataDir || process.env.ORGANIFE_DATABASE_DIR || path.join(__dirname, '../database')));
   const dataFile = path.resolve(String(config.dataFile || path.join(dataDir, 'runtime-state.json')));
+  const extensionAdminPasswordDefault = String(config.extensionAdminPasswordDefault || process.env.EXTENSION_ADMIN_PASSWORD || defaultState.settings.adminPassword).trim() || defaultState.settings.adminPassword;
 
   function ensure() {
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-    if (!fs.existsSync(dataFile)) fs.writeFileSync(dataFile, JSON.stringify(defaultState, null, 2), 'utf8');
+    if (!fs.existsSync(dataFile)) {
+      const initialState = cloneDefaultState();
+      initialState.settings.adminPassword = extensionAdminPasswordDefault;
+      fs.writeFileSync(dataFile, JSON.stringify(initialState, null, 2), 'utf8');
+    }
   }
 
   function read() {
@@ -51,9 +56,11 @@ function createStateStore(options) {
     try {
       const raw = fs.readFileSync(dataFile, 'utf8');
       const parsed = JSON.parse(raw);
+      const settings = Object.assign({}, defaultState.settings, parsed.settings || {});
+      if (!String(settings.adminPassword || '').trim()) settings.adminPassword = extensionAdminPasswordDefault;
       return {
         auth: Object.assign({}, defaultState.auth, parsed.auth || {}),
-        settings: Object.assign({}, defaultState.settings, parsed.settings || {}),
+        settings,
         releaseRequests: Array.isArray(parsed.releaseRequests) ? parsed.releaseRequests : [],
         logs: Array.isArray(parsed.logs) ? parsed.logs : []
       };
@@ -65,9 +72,11 @@ function createStateStore(options) {
   function write(state) {
     ensure();
     const current = state && typeof state === 'object' ? state : {};
+    const settings = current.settings && typeof current.settings === 'object' ? Object.assign({}, current.settings) : Object.assign({}, defaultState.settings);
+    if (!String(settings.adminPassword || '').trim()) settings.adminPassword = extensionAdminPasswordDefault;
     const nextState = {
       auth: current.auth && typeof current.auth === 'object' ? current.auth : defaultState.auth,
-      settings: current.settings && typeof current.settings === 'object' ? current.settings : defaultState.settings,
+      settings,
       releaseRequests: Array.isArray(current.releaseRequests) ? current.releaseRequests : [],
       logs: []
     };

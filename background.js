@@ -3,8 +3,11 @@ if (typeof importScripts === 'function') importScripts('background-blocker.js', 
 
 const browserAPI = (typeof browser !== 'undefined' ? browser : chrome);
 
+const EXTENSION_DEFAULT_ADMIN_PASSWORD = 'admin';
+const LEGACY_EXTENSION_DEFAULT_ADMIN_PASSWORD = 'gadu333';
 let serverUrl = 'http://192.168.100.34:1337';
-let adminPassword = 'gadu333'; // Default value - will be changed if backup/restore
+let adminPassword = EXTENSION_DEFAULT_ADMIN_PASSWORD;
+let adminPasswordIsConfigured = false;
 let restrictedPassword = '';
 let tempPassword = '654321';
 let blockedKeywords = [];
@@ -28,6 +31,7 @@ const LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const LOG_CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
 const BRASILIA_HOUR_CACHE_MS = 30 * 60 * 1000;
 let browserUserLoaded = false;
+let settingsStoragePromise = null;
 let logsDbPromise = null;
 let lastLogsCleanupAt = 0;
 const EMPTY_COMPILED_PATTERNS = Object.freeze({
@@ -186,7 +190,14 @@ async function loadSettingsFromServer() {
       Object.keys(settingsFromJson).length > 0 &&
       JSON.stringify(settingsFromJson) !== JSON.stringify(currentSettings)
     ) {
-      adminPassword = settingsFromJson.adminPassword || adminPassword;
+      const serverAdminPassword = String(settingsFromJson.adminPassword || '').trim();
+      if (serverAdminPassword) {
+        adminPassword = serverAdminPassword;
+        adminPasswordIsConfigured = true;
+      } else if (!adminPasswordIsConfigured && adminPassword === LEGACY_EXTENSION_DEFAULT_ADMIN_PASSWORD) {
+        adminPassword = EXTENSION_DEFAULT_ADMIN_PASSWORD;
+        browserAPI.storage.local.set({ adminPassword });
+      }
       restrictedPassword = String(settingsFromJson.restrictedPassword || '').trim();
       tempPassword = settingsFromJson.tempPassword || tempPassword;
       blockedKeywords = settingsFromJson.blockedKeywords || [];
@@ -239,40 +250,55 @@ async function loadSettingsFromServer() {
 // On startup: load all blocking settings from local storage FIRST so rules
 // are active immediately when the browser opens, before the server responds.
 function loadSettingsFromStorage() {
-  browserAPI.storage.local.get([
-    'adminPassword',
-    'restrictedPassword',
-    'tempPassword',
-    'blockedKeywords',
-    'blockedSites',
-    'allowedLinks',
-    'allowedDomains',
-    'tempAllowedLinks',
-    'totalBlockMode',
-    'browserUser',
-    'companyName',
-    'companyNotice',
-    'quickLinks',
-    'serverUrl'
-  ], (result) => {
-    if (result.adminPassword) adminPassword = result.adminPassword;
-    if (result.restrictedPassword !== undefined) restrictedPassword = String(result.restrictedPassword || '').trim();
-    if (result.tempPassword) tempPassword = result.tempPassword;
-    if (result.blockedKeywords) blockedKeywords = result.blockedKeywords;
-    if (result.blockedSites) blockedSites = result.blockedSites;
-    if (result.allowedLinks) allowedLinks = result.allowedLinks;
-    if (result.allowedDomains) allowedDomains = result.allowedDomains;
-    if (result.tempAllowedLinks) tempAllowedLinks = result.tempAllowedLinks;
-    rebuildCompiledBlockingPatterns();
-    if (result.totalBlockMode !== undefined) totalBlockMode = result.totalBlockMode;
-    browserUser = String(result.browserUser || '').trim();
-    if (result.companyName) companyName = result.companyName;
-    if (result.companyNotice !== undefined) companyNotice = String(result.companyNotice || '').trim();
-    if (Array.isArray(result.quickLinks)) quickLinks = result.quickLinks;
-    if (result.serverUrl) serverUrl = normalizeServerUrl(result.serverUrl) || serverUrl;
-    browserUserLoaded = true;
-    enforceIdentityAcrossTabs();
+  if (settingsStoragePromise) return settingsStoragePromise;
+  settingsStoragePromise = new Promise((resolve) => {
+    browserAPI.storage.local.get([
+      'adminPassword',
+      'restrictedPassword',
+      'tempPassword',
+      'blockedKeywords',
+      'blockedSites',
+      'allowedLinks',
+      'allowedDomains',
+      'tempAllowedLinks',
+      'totalBlockMode',
+      'browserUser',
+      'companyName',
+      'companyNotice',
+      'quickLinks',
+      'serverUrl'
+    ], (result) => {
+      const data = result || {};
+      if (data.adminPassword) {
+        const storedAdminPassword = String(data.adminPassword).trim();
+        if (storedAdminPassword === LEGACY_EXTENSION_DEFAULT_ADMIN_PASSWORD) {
+          adminPassword = EXTENSION_DEFAULT_ADMIN_PASSWORD;
+          browserAPI.storage.local.set({ adminPassword });
+        } else {
+          adminPassword = storedAdminPassword;
+          adminPasswordIsConfigured = true;
+        }
+      }
+      if (data.restrictedPassword !== undefined) restrictedPassword = String(data.restrictedPassword || '').trim();
+      if (data.tempPassword) tempPassword = data.tempPassword;
+      if (data.blockedKeywords) blockedKeywords = data.blockedKeywords;
+      if (data.blockedSites) blockedSites = data.blockedSites;
+      if (data.allowedLinks) allowedLinks = data.allowedLinks;
+      if (data.allowedDomains) allowedDomains = data.allowedDomains;
+      if (data.tempAllowedLinks) tempAllowedLinks = data.tempAllowedLinks;
+      rebuildCompiledBlockingPatterns();
+      if (data.totalBlockMode !== undefined) totalBlockMode = data.totalBlockMode;
+      browserUser = String(data.browserUser || '').trim();
+      if (data.companyName) companyName = data.companyName;
+      if (data.companyNotice !== undefined) companyNotice = String(data.companyNotice || '').trim();
+      if (Array.isArray(data.quickLinks)) quickLinks = data.quickLinks;
+      if (data.serverUrl) serverUrl = normalizeServerUrl(data.serverUrl) || serverUrl;
+      browserUserLoaded = true;
+      enforceIdentityAcrossTabs();
+      resolve();
+    });
   });
+  return settingsStoragePromise;
 }
 
 loadSettingsFromStorage();
@@ -911,6 +937,7 @@ function applySettingsFromDashboard(settings) {
 function resolveAccessRole(password) {
   const candidate = String(password || '');
   if (candidate === adminPassword) return 'admin';
+  if (!adminPasswordIsConfigured && adminPassword === EXTENSION_DEFAULT_ADMIN_PASSWORD && candidate === LEGACY_EXTENSION_DEFAULT_ADMIN_PASSWORD) return 'admin';
   if (restrictedPassword && candidate === restrictedPassword) return 'restricted';
   return '';
 }
@@ -1005,11 +1032,14 @@ function isRequestAuthorized(request, allowedRoles = ['admin']) {
 browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
   switch (request.type) {
     case 'verifyPassword':
-      {
+      loadSettingsFromStorage().then(() => {
         const role = resolveAccessRole(request.password);
         sendResponse({ isValid: !!role, role: role || null });
-      }
-      break;
+      }).catch(() => {
+        const role = resolveAccessRole(request.password);
+        sendResponse({ isValid: !!role, role: role || null });
+      });
+      return true;
 
     case 'verifyTempPassword':
       if (request.password === tempPassword) {
@@ -1031,12 +1061,16 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
       break;
 
     case 'updateAdminPassword':
-      if (request.currentPassword === adminPassword) {
-        adminPassword = request.newPassword;
-        browserAPI.storage.local.set({ adminPassword });
-        sendResponse({ success: true });
-      } else {
-        sendResponse({ success: false });
+      {
+        const newAdminPassword = String(request.newPassword || '').trim();
+        if (request.currentPassword === adminPassword && newAdminPassword.length >= 4) {
+          adminPassword = newAdminPassword;
+          adminPasswordIsConfigured = true;
+          browserAPI.storage.local.set({ adminPassword });
+          sendResponse({ success: true });
+        } else {
+          sendResponse({ success: false });
+        }
       }
       break;
 
@@ -1184,7 +1218,11 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'restoreSettings':
       if (isRequestAuthorized(request, ['admin'])) {
         const settings = request.settings;
-        adminPassword = settings.adminPassword || adminPassword;
+        const restoredAdminPassword = String(settings.adminPassword || '').trim();
+        if (restoredAdminPassword) {
+          adminPassword = restoredAdminPassword;
+          adminPasswordIsConfigured = true;
+        }
         restrictedPassword = String(settings.restrictedPassword || '').trim();
         tempPassword = settings.tempPassword || tempPassword;
         companyName = settings.companyName || companyName;
