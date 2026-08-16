@@ -50,3 +50,13 @@ test('background mantém default admin e compatibilidade legada sem exigir gadu3
   assert.match(background, /LEGACY_EXTENSION_DEFAULT_ADMIN_PASSWORD/);
   assert.match(background, /newAdminPassword\.length >= 4/);
 });
+
+test('popup abre o painel com a aba Config ativa e login cross-browser', () => {
+  const popupHtml = fs.readFileSync(path.resolve(__dirname, '../../../../popup.html'), 'utf8');
+  const popupJs = fs.readFileSync(path.resolve(__dirname, '../../../../popup.js'), 'utf8');
+  assert.match(popupHtml, /<button class="tab-btn active" data-tab="config">Config<\/button>/);
+  assert.doesNotMatch(popupHtml, /<button class="tab-btn active" data-tab="sites">Sites<\/button>/);
+  assert.match(popupHtml, /<div id="tab-config" class="tab-content active">/);
+  assert.match(popupJs, /const startTab = currentAccessRole === 'restricted' \? 'logs' : 'config';/);
+  assert.match(popupJs, /function sendRuntimeMessage\(message, callback\)/);
+});

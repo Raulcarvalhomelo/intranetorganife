@@ -1,6 +1,29 @@
 // Browser compatibility layer
 const browserAPI = (typeof browser !== 'undefined' ? browser : chrome);
 
+function sendRuntimeMessage(message, callback) {
+  let settled = false;
+  const finish = (response) => {
+    if (settled) return;
+    settled = true;
+    if (typeof callback === 'function') callback(response);
+  };
+  try {
+    const result = browserAPI.runtime.sendMessage(message, (response) => {
+      if (browserAPI.runtime.lastError) {
+        finish(undefined);
+        return;
+      }
+      finish(response);
+    });
+    if (result && typeof result.then === 'function') {
+      result.then(finish).catch(() => finish(undefined));
+    }
+  } catch (error) {
+    finish(undefined);
+  }
+}
+
 let isAdmin = false;
 let currentAdminPassword = '';
 let currentAccessRole = '';
@@ -348,8 +371,8 @@ function handleLogin() {
     alert('Digite a senha de administrador');
     return;
   }
-  browserAPI.runtime.sendMessage({ type: 'verifyPassword', password }, (response) => {
-    if (browserAPI.runtime.lastError) {
+  sendRuntimeMessage({ type: 'verifyPassword', password }, (response) => {
+    if (!response) {
       alert('Não foi possível validar a senha. Reabra a extensão e tente novamente.');
       return;
     }
@@ -362,7 +385,7 @@ function handleLogin() {
       setPasswordPromptVisible(false);
       applyAccessRole(currentAccessRole);
       setTabsMenuExpanded(false);
-      const startTab = currentAccessRole === 'restricted' ? 'logs' : 'sites';
+      const startTab = currentAccessRole === 'restricted' ? 'logs' : 'config';
       switchTab(startTab);
       loadAdminData();
     } else {
