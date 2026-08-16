@@ -288,13 +288,19 @@ app.use(createLogsRouter({
 }));
 app.use(createKanbanRouter({ kanbanStore, normalizeCard: kanbanStore.normalizeCard, emitUpdate }));
 
-app.get('/dashboard/', authService.requireAuth, (req, res) => res.sendFile(path.join(__dirname, '../dashboard/index.html')));
-app.get('/dashboard/app.js', authService.requireAuth, (req, res) => res.sendFile(path.join(__dirname, '../dashboard/app.js')));
-app.get('/dashboard/styles.css', authService.requireAuth, (req, res) => res.sendFile(path.join(__dirname, '../dashboard/styles.css')));
-app.get('/dashboard/dashboard-auth.js', authService.requireAuth, (req, res) => res.sendFile(path.join(__dirname, '../dashboard/dashboard-auth.js')));
-app.get('/dashboard/dashboard-logs.js', authService.requireAuth, (req, res) => res.sendFile(path.join(__dirname, '../dashboard/dashboard-logs.js')));
-app.get('/dashboard/dashboard-monitoring.js', authService.requireAuth, (req, res) => res.sendFile(path.join(__dirname, '../dashboard/dashboard-monitoring.js')));
-app.get('/dashboard/dashboard-config.js', authService.requireAuth, (req, res) => res.sendFile(path.join(__dirname, '../dashboard/dashboard-config.js')));
+function sendDashboardAsset(relativePath, res) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  return res.sendFile(path.join(__dirname, '../dashboard', relativePath));
+}
+
+app.get('/dashboard/', authService.requireAuth, (req, res) => sendDashboardAsset('index.html', res));
+app.get('/dashboard/app.js', authService.requireAuth, (req, res) => sendDashboardAsset('app.js', res));
+app.get('/dashboard/styles.css', authService.requireAuth, (req, res) => sendDashboardAsset('styles.css', res));
+app.get('/dashboard/dashboard-auth.js', authService.requireAuth, (req, res) => sendDashboardAsset('dashboard-auth.js', res));
+app.get('/dashboard/dashboard-logs.js', authService.requireAuth, (req, res) => sendDashboardAsset('dashboard-logs.js', res));
+app.get('/dashboard/dashboard-monitoring.js', authService.requireAuth, (req, res) => sendDashboardAsset('dashboard-monitoring.js', res));
+app.get('/dashboard/dashboard-config.js', authService.requireAuth, (req, res) => sendDashboardAsset('dashboard-config.js', res));
 app.get('/', (req, res) => res.redirect('/dashboard/'));
 
 async function migrateLegacyRuntimeLogs() {
