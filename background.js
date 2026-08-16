@@ -252,22 +252,10 @@ async function loadSettingsFromServer() {
 function loadSettingsFromStorage() {
   if (settingsStoragePromise) return settingsStoragePromise;
   settingsStoragePromise = new Promise((resolve) => {
-    browserAPI.storage.local.get([
-      'adminPassword',
-      'restrictedPassword',
-      'tempPassword',
-      'blockedKeywords',
-      'blockedSites',
-      'allowedLinks',
-      'allowedDomains',
-      'tempAllowedLinks',
-      'totalBlockMode',
-      'browserUser',
-      'companyName',
-      'companyNotice',
-      'quickLinks',
-      'serverUrl'
-    ], (result) => {
+    let completed = false;
+    const complete = (result) => {
+      if (completed) return;
+      completed = true;
       const data = result || {};
       if (data.adminPassword) {
         const storedAdminPassword = String(data.adminPassword).trim();
@@ -296,7 +284,28 @@ function loadSettingsFromStorage() {
       browserUserLoaded = true;
       enforceIdentityAcrossTabs();
       resolve();
-    });
+    };
+    try {
+      const result = browserAPI.storage.local.get([
+        'adminPassword',
+        'restrictedPassword',
+        'tempPassword',
+        'blockedKeywords',
+        'blockedSites',
+        'allowedLinks',
+        'allowedDomains',
+        'tempAllowedLinks',
+        'totalBlockMode',
+        'browserUser',
+        'companyName',
+        'companyNotice',
+        'quickLinks',
+        'serverUrl'
+      ], complete);
+      if (result && typeof result.then === 'function') result.then(complete).catch(() => complete({}));
+    } catch (error) {
+      complete({});
+    }
   });
   return settingsStoragePromise;
 }

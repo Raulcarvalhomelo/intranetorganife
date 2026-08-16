@@ -9,16 +9,15 @@ function sendRuntimeMessage(message, callback) {
     if (typeof callback === 'function') callback(response);
   };
   try {
-    const result = browserAPI.runtime.sendMessage(message, (response) => {
+    const onCallback = (response) => {
       if (browserAPI.runtime.lastError) {
         finish(undefined);
         return;
       }
       finish(response);
-    });
-    if (result && typeof result.then === 'function') {
-      result.then(finish).catch(() => finish(undefined));
-    }
+    };
+    const result = browserAPI.runtime.sendMessage(message, onCallback);
+    if (result && typeof result.then === 'function') result.then(finish).catch(() => finish(undefined));
   } catch (error) {
     finish(undefined);
   }

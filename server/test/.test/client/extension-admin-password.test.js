@@ -60,3 +60,9 @@ test('popup abre o painel com a aba Config ativa e login cross-browser', () => {
   assert.match(popupJs, /const startTab = currentAccessRole === 'restricted' \? 'logs' : 'config';/);
   assert.match(popupJs, /function sendRuntimeMessage\(message, callback\)/);
 });
+
+test('módulo IndexedDB não redeclara constantes globais do service worker', () => {
+  const dbModule = fs.readFileSync(path.resolve(__dirname, '../../../../background-db.js'), 'utf8');
+  assert.match(dbModule, /const ORGANIFE_DB_NAME/);
+  assert.doesNotMatch(dbModule, /^const LOGS_DB_NAME/m);
+});
