@@ -45,7 +45,7 @@ Breaking rules is a critical error.
 * Preserve:
 
   * Blocking system (shouldBlockUrl)
-  * Existing SSE
+  * Existing WebSocket realtime
   * allowedDomains, blockedSites, tempAllowedLinks
   * runtime-state.json, NDJSON, SQLite
 
@@ -60,74 +60,74 @@ Breaking rules is a critical error.
 
 ### 3.1 SEND (client → server)
 
-* Only via button action
-* Never automatic
-* Never in background
+* Administrative sends must originate from an explicit user action.
+* Do not add background polling or silent configuration writes.
+* Activity logs may be sent automatically through the existing WebSocket batching path.
+* The log queue must remain bounded to avoid unbounded RAM use while the server is offline.
 
-Forbidden:
+Forbidden for administrative flows:
 
 * polling
-* setInterval
-* automatic retry
-* automatic flush
-* autosync
-* autosave
+* automatic pull loops
+* silent configuration writes
+* autosync outside the approved WebSocket log and notification path
+* autosave outside the current local persistence behavior
 
-Rule: no click, no send
+Rule: admin send = manual button action. Audit log delivery = bounded WebSocket batch.
 
 ### 3.2 RECEIVE (server → client)
 
-* Automatic only allowed via SSE
-* SSE is passive (client does not perform continuous requests)
-* Server sends when necessary
+* Automatic receive uses the existing WebSocket channel.
+* WebSocket is the approved realtime transport for this project.
+* The extension must keep a single active realtime connection.
+* Settings reloads triggered by realtime events must be debounced.
 
 Rule:
 
-* send = manual
-* receive = SSE
+* admin send = manual
+* receive = WebSocket
+* logs = bounded WebSocket batch
 
-### 3.3 SSE RULES
+### 3.3 WEBSOCKET RULES
 
-* Only 1 connection per client
-* Do not open multiple connections
-* Do not use polling
-* Do not use setInterval
-* Do not use WebSocket
-* Do not reconnect in loop
-* Do not mix with automatic fetch
+* Only 1 connection per client.
+* Do not open multiple concurrent realtime connections.
+* Do not add polling as a replacement for WebSocket.
+* Reconnect must use bounded backoff and must not run as a tight loop.
+* Log batching must keep a maximum pending queue size.
+* Realtime settings reload must be debounced to consolidate bursts.
 
-SSE is only for notification
+WebSocket is only for realtime notifications, settings state, Kanban legacy deltas while backend compatibility remains, and bounded audit log delivery.
 
 ### 3.4 CORRECT FLOW
 
-1. User clicks
-2. Client sends
-3. Server saves
-4. Server emits SSE event
-5. Client receives
-6. UI updates
+1. User clicks for administrative changes.
+2. Client sends the requested change.
+3. Server saves.
+4. Server emits WebSocket event.
+5. Client receives.
+6. UI updates after debounced reload when needed.
 
 ### 3.5 FORBIDDEN
 
-* polling
-* fetch loop
+* polling loops
+* fetch loops
 * aggressive reconnection
-* multiple EventSource
-* WebSocket
-* autosync
-* auto refresh
-* automatic sending
-* continuous sync
+* multiple realtime sockets per client
+* unbounded log queues
+* unbounded automatic flush
+* silent administrative updates
+* continuous pull sync
 
 ## 4. DO NOT REACTIVATE OLD BEHAVIORS
 
 Never use:
 
-* automatic sync
+* automatic pull sync
 * continuous automatic pull
-* WebSocket
-* automatic flush
-* silent updates
+* polling as realtime
+* unbounded automatic flush
+* silent administrative updates
 
 ## 5. CHANGES
 
@@ -147,10 +147,11 @@ Always inform:
 
 Confirm:
 
-* no automatic sending
+* no automatic administrative sending
 * no polling
-* no loop
-* only 1 SSE
+* no tight loop
+* only 1 WebSocket realtime connection
+* bounded audit log queue when logs are involved
 
 ## 7. COMPATIBILITY
 
@@ -173,9 +174,10 @@ If there is doubt:
 
 ## 9. FINAL RULE
 
-* Sending: only by button
-* Receiving: only via SSE
-* Any other type of automation is forbidden
+* Administrative sending: only by button
+* Receiving: only via the approved WebSocket channel
+* Audit logs: only through bounded WebSocket batching
+* Automation features must not be reintroduced into the extension
 
 ## 10. TESTS AND MOCK RULES
 
@@ -193,7 +195,7 @@ Always prioritize tests for:
 * URL blocking rules
 * priority between blockedSites, allowedDomains and tempAllowedLinks
 * manual send flow via button
-* passive SSE receiving
+* passive WebSocket receiving
 * creation, approval and blocking of release requests
 * persistence in runtime-state.json
 * writing and reading NDJSON logs
@@ -222,7 +224,7 @@ Always prioritize tests for:
 Can mock:
 
 * external HTTP requests
-* EventSource / SSE on client
+* WebSocket on client
 * browser storage
 * Native Messaging host
 * filesystem
@@ -238,16 +240,15 @@ Do not mock:
 * release request business rules
 * Kanban validations
 * manual button flow
-* SSE receiving rule
+* WebSocket receiving rule
 * persistence rules when persistence is the test objective
 
-### 10.7 SSE RULE
+### 10.7 WEBSOCKET RULE
 
-* SSE tests must validate notification and client reaction.
-* Do not create fake polling to simulate SSE.
-* Do not replace SSE with setInterval.
-* Do not create WebSocket instead of SSE.
-* SSE mock must only simulate server event arrival.
+* WebSocket tests must validate notification and client reaction.
+* Do not create fake polling to simulate WebSocket.
+* Do not replace WebSocket with setInterval.
+* WebSocket mock must only simulate server event arrival.
 
 ### 10.8 BUTTON AND MANUAL ACTION RULE
 
@@ -299,12 +300,12 @@ Example:
 * should block URL when domain is in blockedSites
 * should allow URL when domain is in allowedDomains
 * should send card to server only after save button click
-* should update client when receiving SSE event
+* should update client when receiving WebSocket event
 
 ### 10.14 SECURITY RULE
 
 * Do not create tests that change architecture.
-* Do not introduce polling, autosync, loop or WebSocket just for testing.
+* Do not introduce polling, autosync or loop just for testing.
 * Do not create mocks that hide real problems.
 * Tests must reinforce project rules, not weaken them.
 
@@ -509,8 +510,22 @@ If any of these tests fail, the implementation must be fixed, not the tests.
 
 Default rule:
 Failing tests indicate a problem in the implementation, not in the test.
+
+## 11.16 KANBAN DECOMMISSION RULE
+
+* The Kanban UI inside the extension is disabled.
+* Do not reintroduce Kanban widgets, overlays or standalone extension Kanban behavior without explicit approval.
+* Backend Kanban routes and storage remain for compatibility until a separate removal task is approved.
+* Do not delete Kanban database files, snapshots or contracts during extension UI work.
+
+## 11.17 LEGACY JAVASCRIPT SYNTAX RULE
+
+* The project must remain compatible with Node.js 14 and the current browser extension stack.
+* New code must not use nullish coalescing or optional chaining syntax.
+* Prefer explicit checks, logical operators and CommonJS compatible JavaScript.
+
 ## MANDATORY
 
 Test and mock rules must respect ALL previous rules in this document.
 
-Sending is manual via button. Receiving is automatic only via passive SSE. Polling, loop, setInterval or background sending are forbidden.
+Administrative sending is manual via button. Receiving is automatic through the approved WebSocket channel. Polling, tight loops, unbounded queues and silent administrative sends are forbidden.

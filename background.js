@@ -528,6 +528,11 @@ let wsRetryTimer = null;
 let wsRetryDelay = 1000;
 let wsLogBatch = [];
 let wsLogFlushTimer = null;
+const WS_LOG_BATCH_LIMIT = 1000;
+let wsDroppedLogCount = 0;
+let settingsReloadTimer = null;
+let settingsReloadInProgress = false;
+let settingsReloadQueued = false;
 
 function scheduleWsLogFlush() {
   if (wsLogFlushTimer || !wsLogBatch.length) return;
@@ -544,7 +549,12 @@ function flushWsLogBatch() {
   }
   const batch = wsLogBatch.splice(0, 50);
   try {
-    settingsWebSocket.send(JSON.stringify({ type: 'logs_batch', logs: batch }));
+    settingsWebSocket.send(JSON.stringify({
+      type: 'logs_batch',
+      logs: batch,
+      droppedLogCount: wsDroppedLogCount
+    }));
+    wsDroppedLogCount = 0;
     if (wsLogBatch.length) flushWsLogBatch();
     return true;
   } catch (error) {
@@ -556,8 +566,38 @@ function flushWsLogBatch() {
 function queueWsLog(log) {
   if (!log) return;
   wsLogBatch.push(log);
+  if (wsLogBatch.length > WS_LOG_BATCH_LIMIT) {
+    const overflow = wsLogBatch.length - WS_LOG_BATCH_LIMIT;
+    wsLogBatch.splice(0, overflow);
+    wsDroppedLogCount += overflow;
+  }
   if (wsLogBatch.length >= 50) flushWsLogBatch();
   else scheduleWsLogFlush();
+}
+
+function scheduleSettingsReload() {
+  if (settingsReloadTimer) clearTimeout(settingsReloadTimer);
+  settingsReloadTimer = setTimeout(() => {
+    settingsReloadTimer = null;
+    runSettingsReload();
+  }, 500);
+}
+
+async function runSettingsReload() {
+  if (settingsReloadInProgress) {
+    settingsReloadQueued = true;
+    return;
+  }
+  settingsReloadInProgress = true;
+  try {
+    await loadSettingsFromServer();
+  } finally {
+    settingsReloadInProgress = false;
+    if (settingsReloadQueued) {
+      settingsReloadQueued = false;
+      scheduleSettingsReload();
+    }
+  }
 }
 
 function setupWebSocket() {
@@ -586,7 +626,7 @@ function setupWebSocket() {
         await storageLocalSetAsync({ [KANBAN_REALTIME_DELTA_KEY]: { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, payload } });
         return;
       }
-      await loadSettingsFromServer();
+      scheduleSettingsReload();
     };
     settingsWebSocket.onerror = () => { try { settingsWebSocket.close(); } catch (error) {} };
     settingsWebSocket.onclose = () => {

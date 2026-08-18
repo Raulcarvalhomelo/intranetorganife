@@ -1,15 +1,19 @@
 # Contrato do Kanban
 
+## Status na extensão
+
+O Kanban foi desativado na extensão Organife. A interface da Intranet não deve inicializar widgets, overlays ou página standalone de Kanban. O backend, os contratos e a persistência permanecem legados para compatibilidade até uma tarefa específica de remoção.
+
 ## Fonte das regras
 
-`kanban-core.js` é a referência compartilhada para normalização e regras do Kanban. A extensão, o overlay e o backend devem consumir essas regras ou documentar explicitamente qualquer adaptação compatível.
+`kanban-core.js` é a referência compartilhada para normalização e regras legadas do Kanban. Consumidores externos e o backend devem consumir essas regras ou documentar explicitamente qualquer adaptação compatível.
 
 ## Entidades
 
 | Entidade | Consumidores |
 |---|---|
-| Quadro | Extensão, backend e Dashboard. |
-| Card | `kanban.js`, `kanban-overlay.js`, `kanban-core.js`, `kanban-store.js` e rotas de Kanban. |
+| Quadro | Backend legado, Dashboard e consumidores externos autorizados. |
+| Card | `kanban-core.js`, `kanban-store.js` e rotas de Kanban legadas. |
 | Departamento | Filtros, atribuições e visibilidade dos cards. |
 | Snapshot | Persistência e recuperação operacional do backend. |
 

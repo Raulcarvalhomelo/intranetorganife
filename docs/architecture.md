@@ -8,7 +8,7 @@ O projeto é composto por uma extensão de navegador Manifest V3, um backend Exp
 Extensão MV3
   ├── Service worker: background.js + background-*.js
   ├── Interfaces: popup, options, identity, intranet, blocked
-  └── Kanban: kanban.js, kanban-overlay.js, kanban-core.js
+  └── Kanban na extensão: desativado, backend legado preservado
           │ HTTP + WebSocket
           ▼
 Backend Express / Node.js
@@ -51,7 +51,7 @@ A extensão captura eventos, mantém a persistência local necessária para resi
 
 ### Kanban
 
-`kanban-core.js` contém regras compartilhadas de normalização. A extensão, o overlay e o backend devem consumir essas regras ou manter compatibilidade explícita com elas. O backend persiste dados por `kanban-store.js`.
+O Kanban não é mais inicializado pela extensão. A Intranet oculta os widgets e overlays de Kanban, e a página standalone da extensão informa a desativação. `kanban-core.js`, as rotas e o backend permanecem como legado de compatibilidade até uma tarefa específica de remoção. O backend persiste dados por `kanban-store.js`.
 
 ## Dados operacionais
 
@@ -59,7 +59,7 @@ A extensão captura eventos, mantém a persistência local necessária para resi
 |---|---|---|
 | Configurações e autenticação | JSON operacional | Backend, Dashboard e extensão. |
 | Logs | Arquivos NDJSON diários | Backend, Dashboard e extensão local. |
-| Cards e snapshots | sql.js/SQLite e snapshots | Extensão, overlay, backend e Dashboard. |
+| Cards e snapshots | sql.js/SQLite e snapshots | Backend legado, Dashboard e consumidores externos autorizados. |
 | Logs offline | IndexedDB da extensão | Service worker e interfaces autorizadas. |
 
 ## Regra de evolução

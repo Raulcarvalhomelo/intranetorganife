@@ -23,7 +23,7 @@ A extensão mantém os eventos localmente para resiliência offline. O schema do
 
 ## Envio em lote
 
-O envio de logs deve utilizar a conexão WebSocket existente. O cliente deve agrupar eventos em memória e disparar um lote por limite de quantidade ou intervalo de tempo, evitando uma requisição por evento.
+O envio de logs deve utilizar a conexão WebSocket existente. O cliente deve agrupar eventos em memória e disparar um lote por limite de quantidade ou intervalo de tempo, evitando uma requisição por evento. A fila em memória da extensão deve ter limite máximo para impedir crescimento indefinido durante indisponibilidade do servidor.
 
 O lote deve possuir esta forma:
 
@@ -37,9 +37,12 @@ O lote deve possuir esta forma:
       "action": "navigation",
       "details": {}
     }
-  ]
+  ],
+  "droppedLogCount": 0
 }
 ```
+
+`droppedLogCount` informa quantos eventos antigos foram descartados pela fila bounded da extensão antes do envio. O campo é aditivo e não substitui `logs`.
 
 O cliente deve aguardar `logs_ack` antes de considerar o lote confirmado. Lotes em voo devem ser reencaminhados conforme a política de reconexão quando a conexão for encerrada antes da confirmação.
 

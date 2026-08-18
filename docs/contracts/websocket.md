@@ -30,7 +30,7 @@ Mensagens destinadas a uma sala não devem ser enviadas indiscriminadamente a cl
 | `hello_ack` | Servidor → cliente | Confirmar handshake e sala. |
 | `state_update` | Servidor → clientes | Informar mudança de estado; o payload contém `kind` e timestamp. |
 | `settings_state` | Servidor → cliente | Entregar configurações iniciais ou atualizadas. |
-| `logs_batch` | Extensão → servidor | Enviar lote de logs. O payload contém `logs`. |
+| `logs_batch` | Extensão → servidor | Enviar lote de logs. O payload contém `logs` e pode conter `droppedLogCount`. |
 | `logs_ack` | Servidor → extensão | Confirmar aceitação do lote e informar a quantidade. |
 
 ## Heartbeat
@@ -39,7 +39,7 @@ O servidor deve manter heartbeat para detectar conexões mortas. Clientes devem 
 
 ## Reconexão
 
-A extensão e o Dashboard devem reconectar após falha de rede. O atraso deve aumentar progressivamente até um limite e ser reiniciado após conexão bem-sucedida. Mensagens não confirmadas devem seguir a política do contrato específico; para logs, consultar `docs/contracts/logs.md`.
+A extensão e o Dashboard devem reconectar após falha de rede. O atraso deve aumentar progressivamente até um limite e ser reiniciado após conexão bem-sucedida. A extensão deve consolidar eventos de atualização de configurações com debounce antes de consultar o estado completo. Mensagens não confirmadas devem seguir a política do contrato específico; para logs, consultar `docs/contracts/logs.md`.
 
 ## Evolução
 

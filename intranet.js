@@ -6,6 +6,7 @@ const defaultQuickLinks = [
   { name: 'Suporte TI', url: 'https://suporte.empresa.com' }
 ];
 const THEME_STORAGE_KEY = 'themeMode';
+const KANBAN_EXTENSION_ENABLED = false;
 let favoriteLinksCache = [];
 let favoritesSearchTerm = '';
 
@@ -393,7 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initFavoritesSearch();
     updateStatus();
     initNotes();
-    initTodos();
+    if (KANBAN_EXTENSION_ENABLED) initTodos();
     initNotesTodosTxtExport();
     initNotesTodosTxtImport();
     loadNotice();
