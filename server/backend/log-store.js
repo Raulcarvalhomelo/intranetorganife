@@ -173,6 +173,30 @@ function createLogStore(options) {
     return normalized;
   }
 
+  function extractLogDomain(parsed) {
+    const details = parsed && parsed.details && typeof parsed.details === 'object' ? parsed.details : {};
+    const data = parsed && parsed.data && typeof parsed.data === 'object' ? parsed.data : {};
+    const candidates = [parsed.domain, parsed.hostname, parsed.host, parsed.url, parsed.originalUrl, parsed.href, details.domain, details.hostname, details.host, details.url, details.href, data.domain, data.hostname, data.host, data.url, data.href];
+    for (let index = 0; index < candidates.length; index += 1) {
+      const raw = String(candidates[index] || '').trim();
+      if (!raw) continue;
+      try {
+        if (raw.indexOf('://') >= 0) return new URL(raw).hostname.toLowerCase();
+      } catch (error) {}
+      return raw.split('/')[0].split(':')[0].toLowerCase();
+    }
+    return '';
+  }
+
+  function timeToMinutes(value) {
+    const match = String(value || '').match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return null;
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    if (hours > 23 || minutes > 59) return null;
+    return hours * 60 + minutes;
+  }
+
   async function readDay(day, filters) {
     const result = [];
     const filePath = path.join(logsDir, `${day}.ndjson`);
@@ -188,11 +212,23 @@ function createLogStore(options) {
         if (!parsed || typeof parsed !== 'object') continue;
         const user = String(parsed.browserUser || parsed.windowsUser || parsed.user || parsed.user_id || '').toLowerCase();
         const action = String(parsed.action || parsed.type || '').toLowerCase();
-        const details = parsed.details && typeof parsed.details === 'object' ? parsed.details : {};
+        const timestampMs = new Date(parsed.timestamp || 0).getTime();
+        const domain = extractLogDomain(parsed);
         const payload = JSON.stringify(parsed).toLowerCase();
         const query = String(filters.q || '').toLowerCase();
         if (filters.type && action !== filters.type) continue;
         if (filters.user && user.indexOf(filters.user) < 0) continue;
+        if (Array.isArray(filters.users) && filters.users.length && !filters.users.some((entry) => user.indexOf(entry) >= 0)) continue;
+        if (filters.domain && domain.indexOf(filters.domain) < 0) continue;
+        if (filters.startMinutes !== null || filters.endMinutes !== null) {
+          const date = new Date(timestampMs);
+          const minutes = date.getUTCHours() * 60 + date.getUTCMinutes();
+          if (filters.startMinutes !== null && filters.endMinutes !== null && filters.startMinutes <= filters.endMinutes && (minutes < filters.startMinutes || minutes > filters.endMinutes)) continue;
+          if (filters.startMinutes !== null && filters.endMinutes !== null && filters.startMinutes > filters.endMinutes && minutes < filters.startMinutes && minutes > filters.endMinutes) continue;
+          if (filters.startMinutes !== null && filters.endMinutes === null && minutes < filters.startMinutes) continue;
+          if (filters.startMinutes === null && filters.endMinutes !== null && minutes > filters.endMinutes) continue;
+        }
+        if (filters.beforeTimestampMs !== null && (timestampMs > filters.beforeTimestampMs || (timestampMs === filters.beforeTimestampMs && String(parsed.id || '') >= String(filters.beforeId || '')))) continue;
         if (query && payload.indexOf(query) < 0) continue;
         result.push(parsed);
         if (result.length > filters.limit) result.shift();
@@ -203,22 +239,50 @@ function createLogStore(options) {
     return result.reverse();
   }
 
-  async function readLogs(filters) {
-    const source = filters || {};
-    const normalized = {
-      limit: Math.max(1, Math.min(5000, Number(source.limit) || 200)),
-      q: String(source.q || '').trim(),
-      type: String(source.type || '').trim().toLowerCase(),
-      user: String(source.user || '').trim().toLowerCase()
+  function normalizeReadFilters(source) {
+    const input = source || {};
+    const rawUsers = String(input.users || '').split(',').map((entry) => entry.trim().toLowerCase()).filter(Boolean);
+    const cursor = String(input.cursor || '').split('|');
+    const cursorTimestamp = cursor.length === 2 ? Number(cursor[0]) : NaN;
+    const maxLimit = Number(input.maxLimit) || 100;
+    return {
+      limit: Math.max(1, Math.min(maxLimit, Number(input.limit) || 50)),
+      q: String(input.q || '').trim().toLowerCase(),
+      type: String(input.type || '').trim().toLowerCase(),
+      user: String(input.user || '').trim().toLowerCase(),
+      users: rawUsers,
+      domain: String(input.domain || '').trim().toLowerCase(),
+      startMinutes: timeToMinutes(input.startTime),
+      endMinutes: timeToMinutes(input.endTime),
+      beforeTimestampMs: Number.isFinite(cursorTimestamp) ? cursorTimestamp : null,
+      beforeId: cursor.length === 2 ? cursor[1] : ''
     };
+  }
+
+  async function readLogsPage(filters) {
+    const source = filters || {};
+    const normalized = normalizeReadFilters(source);
     const requestedDay = /^\d{4}-\d{2}-\d{2}$/.test(String(source.day || '')) ? String(source.day) : '';
     const days = requestedDay ? [requestedDay] : retentionDayKeys();
     const rows = [];
-    for (let index = 0; index < days.length && rows.length < normalized.limit; index += 1) {
-      const dayRows = await readDay(days[index], Object.assign({}, normalized, { limit: normalized.limit - rows.length }));
+    for (let index = 0; index < days.length && rows.length <= normalized.limit; index += 1) {
+      const dayRows = await readDay(days[index], Object.assign({}, normalized, { limit: normalized.limit + 1 - rows.length }));
       rows.push.apply(rows, dayRows);
     }
-    return rows.slice(0, normalized.limit);
+    const items = rows.slice(0, normalized.limit);
+    const last = items[items.length - 1];
+    return {
+      items,
+      pageSize: normalized.limit,
+      hasMore: rows.length > normalized.limit,
+      nextCursor: rows.length > normalized.limit && last ? `${new Date(last.timestamp).getTime()}|${String(last.id || '')}` : null
+    };
+  }
+
+  async function readLogs(filters) {
+    const source = filters || {};
+    const page = await readLogsPage(Object.assign({}, source, { maxLimit: 5000, limit: Math.min(5000, Number(source.limit) || 200) }));
+    return page.items;
   }
 
   async function replaceLogs(items) {
@@ -247,7 +311,7 @@ function createLogStore(options) {
     await writer.closeAll();
   }
 
-  return { logsDir, initialize, queueLogs, flush, readLogs, replaceLogs, cleanupOldFiles, close };
+  return { logsDir, initialize, queueLogs, flush, readLogs, readLogsPage, replaceLogs, cleanupOldFiles, close };
 }
 
 module.exports = { createNdjsonWriter, createLogStore };

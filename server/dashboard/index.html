@@ -132,7 +132,8 @@
           <option value="form_submit">Formulário</option>
           <option value="access">Access</option>
         </select>
-        <button id="refreshLogs">Atualizar atividade e logs</button>
+        <button id="refreshActivity">Atualizar atividade</button>
+        <button id="refreshLogs">Atualizar logs brutos</button>
       </div>
       <div id="activityPanel" class="activity-panel">
         <div class="activity-heading">
@@ -155,6 +156,7 @@
           <thead><tr><th>Data</th><th>Usuário</th><th>Navegador</th><th>Domínio</th><th>Tipo/Ação</th><th>Dados</th></tr></thead>
           <tbody id="logsBody"></tbody>
         </table>
+        <div class="logs-pagination"><span id="logsPaginationStatus">Nenhum registro carregado</span><button id="loadMoreLogs" type="button" hidden>Carregar mais</button></div>
       </details>
     </section>
 

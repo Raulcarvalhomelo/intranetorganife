@@ -114,3 +114,12 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: Con
   .activity-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .activity-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
 }
+
+.logs-pagination { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding-top: .75rem; color: #64748b; font-size: .78rem; }
+.logs-pagination button { flex: 0 0 auto; }
+.log-details-toggle { padding: .3rem .55rem; font-size: .75rem; }
+.log-details pre { max-height: 18rem; overflow: auto; padding: .75rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: .5rem; white-space: pre-wrap; }
+.raw-logs-details table { content-visibility: auto; contain-intrinsic-size: 0 24rem; }
+@media (max-width: 639px) {
+  .logs-pagination { align-items: flex-start; flex-direction: column; }
+}

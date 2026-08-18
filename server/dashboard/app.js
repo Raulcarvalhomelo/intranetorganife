@@ -6,6 +6,10 @@ let latestCounts = { requests: 0, logs: 0, blockedSites: 0 };
 let refreshTimer = null;
 let logsFilterTimer = null;
 let requestsFilterTimer = null;
+let logsCursor = null;
+let logsRows = [];
+let logsLoading = false;
+let logsAbortController = null;
 let sessionInfo = { username: '', role: 'admin' };
 const VIEWER_ALLOWED_TABS = ['requests', 'logs', 'notices'];
 
@@ -238,7 +242,7 @@ function restoreSettings(event) {
         method: 'POST',
         body: JSON.stringify(parsed)
       });
-      await Promise.all([loadSettings(), loadConfig(), loadRequests(), loadLogs()]);
+      await Promise.all([loadSettings(), loadConfig(), loadRequests()]);
       statusEl.textContent = 'Backup restaurado';
     } catch {
       statusEl.textContent = 'Arquivo de backup inválido';
@@ -435,8 +439,15 @@ function formatLogDateTime(timestamp) {
   }).format(date);
 }
 
-async function loadLogs() {
-  const params = new URLSearchParams({ limit: '200' });
+async function loadLogs(options) {
+  const settings = options || {};
+  const append = settings.append === true;
+  if (logsLoading) return;
+  if (!append) {
+    logsCursor = null;
+    logsRows = [];
+  }
+  const params = new URLSearchParams({ limit: '50' });
   const user = document.getElementById('logsUserFilter');
   const allUsers = document.getElementById('logsAllUsers');
   const day = document.getElementById('logsDayFilter');
@@ -453,39 +464,74 @@ async function loadLogs() {
   const searchValue = String(search ? search.value : '').trim();
   const domainValue = String(domain ? domain.value : '').trim();
   const typeValue = String(type ? type.value : '').trim();
-  const startMinutes = parseTimeToMinutes(startTimeValue);
-  const endMinutes = parseTimeToMinutes(endTimeValue);
   const selectedUsers = userValue.split(',').map((entry) => entry.trim()).filter(Boolean);
-  if (isAllUsers) {
-    params.set('allUsers', '1');
-  } else if (selectedUsers.length > 1) {
-    params.set('users', selectedUsers.join(','));
-  } else if (selectedUsers.length === 1) {
-    params.set('user', selectedUsers[0]);
-  }
+  if (isAllUsers) params.set('allUsers', '1');
+  else if (selectedUsers.length > 1) params.set('users', selectedUsers.join(','));
+  else if (selectedUsers.length === 1) params.set('user', selectedUsers[0]);
   if (dayValue) params.set('day', dayValue);
+  if (startTimeValue) params.set('startTime', startTimeValue);
+  if (endTimeValue) params.set('endTime', endTimeValue);
   if (searchValue) params.set('q', searchValue);
   if (domainValue) params.set('domain', domainValue);
   if (typeValue) params.set('type', typeValue);
-  const rows = await api(`/logs/by-user-day?${params.toString()}`);
-  const visibleRows = rows.filter((row) => {
-    const timestampMinutes = getTimestampMinutes(row.timestamp);
-    return isWithinTimeRange(timestampMinutes, startMinutes, endMinutes);
-  });
-  latestCounts.logs = visibleRows.length;
-  renderStats();
+  if (append && logsCursor) params.set('cursor', logsCursor);
+  if (logsAbortController) logsAbortController.abort();
+  logsAbortController = typeof AbortController === 'function' ? new AbortController() : null;
+  logsLoading = true;
   const body = document.getElementById('logsBody');
-  body.innerHTML = visibleRows.map((r) => `
+  if (body && !append) body.innerHTML = '<tr><td colspan="6" class="empty-cell">Carregando 50 registros...</td></tr>';
+  try {
+    const page = await api(`/logs/by-user-day?${params.toString()}`, logsAbortController ? { signal: logsAbortController.signal } : undefined);
+    const items = page && Array.isArray(page.items) ? page.items : [];
+    logsRows = append ? logsRows.concat(items) : items;
+    logsCursor = page && page.hasMore ? page.nextCursor : null;
+    latestCounts.logs = logsRows.length;
+    renderStats();
+    renderLogsRows(logsRows);
+    updateLogsPagination(Boolean(page && page.hasMore));
+  } catch (error) {
+    if (!error || error.name !== 'AbortError') {
+      if (body) body.innerHTML = '<tr><td colspan="6" class="empty-cell">Não foi possível carregar os logs.</td></tr>';
+      updateLogsPagination(false);
+    }
+  } finally {
+    logsLoading = false;
+  }
+}
+
+function renderLogsRows(rows) {
+  const body = document.getElementById('logsBody');
+  if (!body) return;
+  body.innerHTML = rows.map((r) => `
     <tr>
       <td>${esc(formatLogDateTime(r.timestamp))}</td>
       <td>${esc(getLogUser(r))}</td>
       <td>${esc(getLogBrowser(r))}</td>
       <td>${esc(getLogDomain(r))}</td>
       <td>${esc(r.type || r.action || '-')}</td>
-      <td><pre>${esc(JSON.stringify(getLogPayload(r), null, 2))}</pre></td>
+      <td><button type="button" class="log-details-toggle" data-log-index="${rows.indexOf(r)}">Detalhes</button></td>
     </tr>
-    `).join('');
-  if (typeof loadActivity === 'function') loadActivity();
+  `).join('');
+  body.querySelectorAll('.log-details-toggle').forEach((button) => {
+    button.onclick = () => {
+      const row = rows[Number(button.dataset.logIndex)];
+      const details = button.closest('tr').querySelector('.log-details');
+      if (details) details.remove();
+      else {
+        const detailRow = document.createElement('tr');
+        detailRow.className = 'log-details';
+        detailRow.innerHTML = `<td colspan="6"><pre>${esc(JSON.stringify(getLogPayload(row), null, 2))}</pre></td>`;
+        button.closest('tr').after(detailRow);
+      }
+    };
+  });
+}
+
+function updateLogsPagination(hasMore) {
+  const button = document.getElementById('loadMoreLogs');
+  const status = document.getElementById('logsPaginationStatus');
+  if (button) button.hidden = !hasMore;
+  if (status) status.textContent = logsRows.length ? `${logsRows.length} registros carregados${hasMore ? ' · há mais resultados' : ''}` : 'Nenhum registro encontrado';
 }
 function setDefaultLogsDay() {
 
@@ -505,10 +551,10 @@ function setupLogsFilters() {
   const domain = document.getElementById('logsDomainFilter');
   const type = document.getElementById('logsTypeFilter');
   const refresh = document.getElementById('refreshLogs');
+  const refreshActivity = document.getElementById('refreshActivity');
+  const loadMore = document.getElementById('loadMoreLogs');
   const triggerByEnter = (event) => {
-    if (event && event.key === 'Enter') {
-      loadLogs();
-    }
+    if (event && event.key === 'Enter') loadLogs();
   };
   const bindTimeInput = (input) => {
     if (!input) return;
@@ -517,7 +563,6 @@ function setupLogsFilters() {
     };
     input.onblur = () => {
       input.value = normalizeTimeInputValue(input.value);
-      loadLogs();
     };
     input.onkeydown = (event) => {
       if (event && event.key === 'Enter') {
@@ -532,20 +577,21 @@ function setupLogsFilters() {
       allUsers.onchange = () => {
         user.disabled = allUsers.checked;
         if (allUsers.checked) user.value = '';
-        loadLogs();
       };
       user.disabled = allUsers.checked;
     } else {
       allUsers.onchange = () => loadLogs();
     }
   }
-  if (day) day.onchange = () => loadLogs();
+  if (day) day.onchange = () => {};
   bindTimeInput(startTime);
   bindTimeInput(endTime);
   if (search) search.onkeydown = triggerByEnter;
   if (domain) domain.onkeydown = triggerByEnter;
-  if (type) type.onchange = () => loadLogs();
+  if (type) type.onchange = () => {};
   if (refresh) refresh.onclick = () => loadLogs();
+  if (refreshActivity) refreshActivity.onclick = () => loadActivity();
+  if (loadMore) loadMore.onclick = () => loadLogs({ append: true });
 }
 
 function renderStats() {
@@ -622,13 +668,13 @@ function initRealtime() {
         let nextStatus = 'Atualizado em tempo real';
         if (isViewerSession()) {
           if (eventData.kind !== 'logs') await loadRequests();
-          else nextStatus = 'Novos logs disponíveis. Clique em "Puxar logs"';
+          else nextStatus = 'Novos logs disponíveis. Clique em "Atualizar logs brutos"';
         } else if (eventData.kind === 'settings') {
           await Promise.all([loadSettings(), loadConfig(), loadRequests()]);
         } else if (eventData.kind === 'requests') {
           await Promise.all([loadRequests(), loadSettings()]);
         } else if (eventData.kind === 'logs') {
-          nextStatus = 'Novos logs disponíveis. Clique em "Puxar logs"';
+          nextStatus = 'Novos logs disponíveis. Clique em "Atualizar logs brutos"';
         } else {
           await Promise.all([loadSettings(), loadConfig(), loadRequests()]);
         }

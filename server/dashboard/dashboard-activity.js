@@ -20,7 +20,7 @@
     const domain = document.getElementById('logsDomainFilter');
     const startTime = document.getElementById('logsStartTime');
     const endTime = document.getElementById('logsEndTime');
-    const params = new URLSearchParams({ limit: '2000' });
+    const params = new URLSearchParams({ limit: '500' });
     const userValue = String(user ? user.value : '').trim();
     if (allUsers && allUsers.checked) params.set('allUsers', '1');
     else if (userValue.indexOf(',') < 0 && userValue) params.set('user', userValue);

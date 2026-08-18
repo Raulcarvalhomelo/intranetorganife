@@ -21,14 +21,19 @@ function createLogsRouter(options) {
 
   async function listLogs(req, res) {
     try {
-      const rows = await logStore.readLogs({
-        limit: Math.max(1, Math.min(5000, Number(req.query.limit) || 200)),
+      const page = await logStore.readLogsPage({
+        limit: Math.max(1, Math.min(100, Number(req.query.limit) || 50)),
+        cursor: req.query.cursor,
         q: req.query.q,
         type: req.query.type,
         user: req.query.user,
+        users: req.query.users,
+        domain: req.query.domain,
+        startTime: req.query.startTime,
+        endTime: req.query.endTime,
         day: req.query.day
       });
-      return res.json(rows);
+      return res.json(page);
     } catch (error) {
       return res.status(500).json({ message: 'erro-ao-consultar-logs' });
     }

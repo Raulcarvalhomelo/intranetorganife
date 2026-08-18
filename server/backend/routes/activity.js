@@ -10,7 +10,7 @@ function createActivityRouter(options) {
   const requireAuth = config.requireAuth || function (req, res, next) { next(); };
 
   function normalizeLimit(value) {
-    return Math.max(1, Math.min(5000, Number(value) || 2000));
+    return Math.max(1, Math.min(1000, Number(value) || 500));
   }
 
   function parseMinutes(value) {
@@ -53,9 +53,13 @@ function createActivityRouter(options) {
         q: req.query.q,
         type: req.query.type,
         user: req.query.user,
+        users: req.query.users,
+        domain: req.query.domain,
+        startTime: req.query.startTime,
+        endTime: req.query.endTime,
         day: req.query.day
       });
-      return res.json(buildActivity(filterActivityRows(rows, req.query)));
+      return res.json(buildActivity(rows));
     } catch (error) {
       return res.status(500).json({ message: 'erro-ao-calcular-atividade' });
     }
