@@ -213,6 +213,7 @@ app.post('/dashboard/api/passwords', authService.requireAuth, authService.requir
     if (!authService.safeEqual(current, authService.getDashboardPassword())) return res.status(401).json({ message: 'senha-dashboard-atual-invalida' });
     if (wantsAdmin.length < 4) return res.status(400).json({ message: 'senha-admin-curta' });
     state.settings.adminPassword = wantsAdmin;
+    state.settings.adminPasswordConfigured = true;
   }
   if (wantsViewer) {
     const current = body.currentDashboardPasswordForViewer || body.currentDashboardPassword || '';

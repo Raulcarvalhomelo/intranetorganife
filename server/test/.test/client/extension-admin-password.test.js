@@ -11,44 +11,61 @@ function tempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'organife-extension-auth-'));
 }
 
-test('estado novo da extensão usa admin como senha padrão', () => {
+test('estado novo da extensão usa gadu333 como senha padrão', () => {
   const dataDir = tempDir();
   try {
     const store = createStateStore({ dataDir });
     const state = store.read();
-    assert.equal(state.settings.adminPassword, 'admin');
+    assert.equal(state.settings.adminPassword, 'gadu333');
+    assert.equal(state.settings.adminPasswordConfigured, false);
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
 
-test('estado legado com senha vazia é migrado para o default admin', () => {
+test('estado legado com senha vazia é migrado para o default gadu333', () => {
   const dataDir = tempDir();
   try {
     fs.writeFileSync(path.join(dataDir, 'runtime-state.json'), JSON.stringify({ settings: { adminPassword: '' } }), 'utf8');
     const store = createStateStore({ dataDir });
-    assert.equal(store.read().settings.adminPassword, 'admin');
+    assert.equal(store.read().settings.adminPassword, 'gadu333');
+    assert.equal(store.read().settings.adminPasswordConfigured, false);
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
 
-test('default configurável é respeitado apenas quando o estado não possui senha', () => {
+test('default configurável é respeitado apenas quando o estado não possui senha explícita', () => {
   const dataDir = tempDir();
   try {
     fs.writeFileSync(path.join(dataDir, 'runtime-state.json'), JSON.stringify({ settings: { adminPassword: '' } }), 'utf8');
     const store = createStateStore({ dataDir, extensionAdminPasswordDefault: 'custom-admin' });
     assert.equal(store.read().settings.adminPassword, 'custom-admin');
+    assert.equal(store.read().settings.adminPasswordConfigured, false);
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
 
-test('background mantém default admin e compatibilidade legada sem exigir gadu333', () => {
+test('background mantém default gadu333 e compatibilidade legada com admin', () => {
   const background = fs.readFileSync(path.resolve(__dirname, '../../../../background.js'), 'utf8');
-  assert.match(background, /const EXTENSION_DEFAULT_ADMIN_PASSWORD = ['"]admin['"]/);
-  assert.match(background, /LEGACY_EXTENSION_DEFAULT_ADMIN_PASSWORD/);
+  assert.match(background, /const EXTENSION_DEFAULT_ADMIN_PASSWORD = ['"]gadu333['"]/);
+  assert.match(background, /const LEGACY_EXTENSION_DEFAULT_ADMIN_PASSWORD = ['"]admin['"]/);
+  assert.match(background, /adminPasswordConfigured/);
   assert.match(background, /newAdminPassword\.length >= 4/);
+});
+
+test('senha explicitamente configurada permanece distinta do padrão', () => {
+  const dataDir = tempDir();
+  try {
+    fs.writeFileSync(path.join(dataDir, 'runtime-state.json'), JSON.stringify({ settings: { adminPassword: 'nova-senha', adminPasswordConfigured: true } }), 'utf8');
+    const store = createStateStore({ dataDir });
+    const state = store.read();
+    assert.equal(state.settings.adminPassword, 'nova-senha');
+    assert.equal(state.settings.adminPasswordConfigured, true);
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
 });
 
 test('popup abre o painel com a aba Config ativa e login cross-browser', () => {

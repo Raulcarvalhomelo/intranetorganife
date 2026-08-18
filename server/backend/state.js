@@ -9,7 +9,8 @@ const defaultState = {
     dashboardViewerPassword: ''
   },
   settings: {
-    adminPassword: 'admin',
+    adminPassword: 'gadu333',
+    adminPasswordConfigured: false,
     restrictedPassword: '',
     tempPassword: '',
     companyName: 'Organife',
@@ -47,6 +48,7 @@ function createStateStore(options) {
     if (!fs.existsSync(dataFile)) {
       const initialState = cloneDefaultState();
       initialState.settings.adminPassword = extensionAdminPasswordDefault;
+      initialState.settings.adminPasswordConfigured = false;
       fs.writeFileSync(dataFile, JSON.stringify(initialState, null, 2), 'utf8');
     }
   }
@@ -56,8 +58,16 @@ function createStateStore(options) {
     try {
       const raw = fs.readFileSync(dataFile, 'utf8');
       const parsed = JSON.parse(raw);
-      const settings = Object.assign({}, defaultState.settings, parsed.settings || {});
-      if (!String(settings.adminPassword || '').trim()) settings.adminPassword = extensionAdminPasswordDefault;
+      const parsedSettings = parsed.settings && typeof parsed.settings === 'object' ? parsed.settings : {};
+      const settings = Object.assign({}, defaultState.settings, parsedSettings);
+      const storedAdminPassword = String(settings.adminPassword || '').trim();
+      const hasExplicitMarker = parsedSettings.adminPasswordConfigured === true;
+      if (!hasExplicitMarker && (!storedAdminPassword || storedAdminPassword === 'admin' || storedAdminPassword === 'gadu333')) {
+        settings.adminPassword = extensionAdminPasswordDefault;
+        settings.adminPasswordConfigured = false;
+      } else if (!hasExplicitMarker) {
+        settings.adminPasswordConfigured = true;
+      }
       return {
         auth: Object.assign({}, defaultState.auth, parsed.auth || {}),
         settings,
@@ -74,6 +84,7 @@ function createStateStore(options) {
     const current = state && typeof state === 'object' ? state : {};
     const settings = current.settings && typeof current.settings === 'object' ? Object.assign({}, current.settings) : Object.assign({}, defaultState.settings);
     if (!String(settings.adminPassword || '').trim()) settings.adminPassword = extensionAdminPasswordDefault;
+    settings.adminPasswordConfigured = settings.adminPasswordConfigured === true;
     const nextState = {
       auth: current.auth && typeof current.auth === 'object' ? current.auth : defaultState.auth,
       settings,

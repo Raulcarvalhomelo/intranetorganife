@@ -29,7 +29,7 @@ function loadConfig(env) {
     dashboardPasswordDefault: String(source.DASHBOARD_PASSWORD || '').trim() || 'admin123',
     dashboardViewerUser: String(source.DASHBOARD_VIEW_USER || '').trim() || 'visualizacao',
     dashboardViewerPasswordDefault: String(source.DASHBOARD_VIEW_PASSWORD || '').trim() || 'visual1234',
-    extensionAdminPasswordDefault: String(source.EXTENSION_ADMIN_PASSWORD || '').trim() || 'admin',
+    extensionAdminPasswordDefault: String(source.EXTENSION_ADMIN_PASSWORD || '').trim() || 'gadu333',
     dashboardSessionSecret: String(source.DASHBOARD_SESSION_SECRET || '').trim(),
     dashboardCookieSecure: String(source.DASHBOARD_COOKIE_SECURE || '') === '1'
   };

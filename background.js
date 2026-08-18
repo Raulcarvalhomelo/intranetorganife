@@ -3,8 +3,8 @@ if (typeof importScripts === 'function') importScripts('background-blocker.js', 
 
 const browserAPI = (typeof browser !== 'undefined' ? browser : chrome);
 
-const EXTENSION_DEFAULT_ADMIN_PASSWORD = 'admin';
-const LEGACY_EXTENSION_DEFAULT_ADMIN_PASSWORD = 'gadu333';
+const EXTENSION_DEFAULT_ADMIN_PASSWORD = 'gadu333';
+const LEGACY_EXTENSION_DEFAULT_ADMIN_PASSWORD = 'admin';
 let serverUrl = 'http://192.168.100.34:1337';
 let adminPassword = EXTENSION_DEFAULT_ADMIN_PASSWORD;
 let adminPasswordIsConfigured = false;
@@ -191,12 +191,15 @@ async function loadSettingsFromServer() {
       JSON.stringify(settingsFromJson) !== JSON.stringify(currentSettings)
     ) {
       const serverAdminPassword = String(settingsFromJson.adminPassword || '').trim();
-      if (serverAdminPassword) {
+      const hasAdminConfiguredMarker = Object.prototype.hasOwnProperty.call(settingsFromJson, 'adminPasswordConfigured');
+      const serverAdminPasswordConfigured = settingsFromJson.adminPasswordConfigured === true
+        || (!hasAdminConfiguredMarker && serverAdminPassword && serverAdminPassword !== LEGACY_EXTENSION_DEFAULT_ADMIN_PASSWORD && serverAdminPassword !== EXTENSION_DEFAULT_ADMIN_PASSWORD);
+      if (serverAdminPasswordConfigured && serverAdminPassword) {
         adminPassword = serverAdminPassword;
         adminPasswordIsConfigured = true;
-      } else if (!adminPasswordIsConfigured && adminPassword === LEGACY_EXTENSION_DEFAULT_ADMIN_PASSWORD) {
+      } else {
         adminPassword = EXTENSION_DEFAULT_ADMIN_PASSWORD;
-        browserAPI.storage.local.set({ adminPassword });
+        adminPasswordIsConfigured = false;
       }
       restrictedPassword = String(settingsFromJson.restrictedPassword || '').trim();
       tempPassword = settingsFromJson.tempPassword || tempPassword;
@@ -225,6 +228,7 @@ async function loadSettingsFromServer() {
       
       browserAPI.storage.local.set({
         adminPassword,
+        adminPasswordConfigured: adminPasswordIsConfigured,
         restrictedPassword,
         tempPassword,
         blockedKeywords,
@@ -259,12 +263,14 @@ function loadSettingsFromStorage() {
       const data = result || {};
       if (data.adminPassword) {
         const storedAdminPassword = String(data.adminPassword).trim();
-        if (storedAdminPassword === LEGACY_EXTENSION_DEFAULT_ADMIN_PASSWORD) {
-          adminPassword = EXTENSION_DEFAULT_ADMIN_PASSWORD;
-          browserAPI.storage.local.set({ adminPassword });
-        } else {
+        const storedConfigured = data.adminPasswordConfigured === true;
+        if (storedConfigured || (storedAdminPassword !== LEGACY_EXTENSION_DEFAULT_ADMIN_PASSWORD && storedAdminPassword !== EXTENSION_DEFAULT_ADMIN_PASSWORD)) {
           adminPassword = storedAdminPassword;
-          adminPasswordIsConfigured = true;
+          adminPasswordIsConfigured = storedConfigured || storedAdminPassword !== EXTENSION_DEFAULT_ADMIN_PASSWORD;
+        } else {
+          adminPassword = EXTENSION_DEFAULT_ADMIN_PASSWORD;
+          adminPasswordIsConfigured = false;
+          browserAPI.storage.local.set({ adminPassword, adminPasswordConfigured: false });
         }
       }
       if (data.restrictedPassword !== undefined) restrictedPassword = String(data.restrictedPassword || '').trim();
@@ -288,6 +294,7 @@ function loadSettingsFromStorage() {
     try {
       const result = browserAPI.storage.local.get([
         'adminPassword',
+        'adminPasswordConfigured',
         'restrictedPassword',
         'tempPassword',
         'blockedKeywords',
@@ -909,7 +916,15 @@ function normalizeArray(v) {
 }
 
 function applySettingsFromDashboard(settings) {
-  adminPassword = settings.adminPassword || adminPassword;
+  const incomingAdminPassword = String(settings.adminPassword || '').trim();
+  const incomingConfigured = settings.adminPasswordConfigured === true;
+  if (incomingConfigured && incomingAdminPassword) {
+    adminPassword = incomingAdminPassword;
+    adminPasswordIsConfigured = true;
+  } else {
+    adminPassword = EXTENSION_DEFAULT_ADMIN_PASSWORD;
+    adminPasswordIsConfigured = false;
+  }
   restrictedPassword = String(settings.restrictedPassword || '').trim();
   tempPassword = settings.tempPassword || tempPassword;
   blockedKeywords = normalizeArray(settings.blockedKeywords);
@@ -1078,7 +1093,7 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (request.currentPassword === adminPassword && newAdminPassword.length >= 4) {
           adminPassword = newAdminPassword;
           adminPasswordIsConfigured = true;
-          browserAPI.storage.local.set({ adminPassword });
+          browserAPI.storage.local.set({ adminPassword, adminPasswordConfigured: true });
           sendResponse({ success: true });
         } else {
           sendResponse({ success: false });
@@ -1209,6 +1224,7 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (isRequestAuthorized(request, ['admin'])) {
         const settings = {
           adminPassword,
+          adminPasswordConfigured: adminPasswordIsConfigured,
           restrictedPassword,
           tempPassword,
           companyName,
@@ -1229,11 +1245,14 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     case 'restoreSettings':
       if (isRequestAuthorized(request, ['admin'])) {
-        const settings = request.settings;
+        const settings = request.settings || {};
         const restoredAdminPassword = String(settings.adminPassword || '').trim();
-        if (restoredAdminPassword) {
+        if (settings.adminPasswordConfigured === true && restoredAdminPassword) {
           adminPassword = restoredAdminPassword;
           adminPasswordIsConfigured = true;
+        } else {
+          adminPassword = EXTENSION_DEFAULT_ADMIN_PASSWORD;
+          adminPasswordIsConfigured = false;
         }
         restrictedPassword = String(settings.restrictedPassword || '').trim();
         tempPassword = settings.tempPassword || tempPassword;
@@ -1253,6 +1272,7 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
         
         browserAPI.storage.local.set({
           adminPassword,
+          adminPasswordConfigured: adminPasswordIsConfigured,
           restrictedPassword,
           tempPassword,
           companyName,
