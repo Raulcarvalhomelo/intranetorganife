@@ -20,7 +20,9 @@
     "POST /dashboard/api/release-requests/:id/block",
     "POST /dashboard/api/release-requests/:id/approve",
     "GET /dashboard/api/logs",
-    "GET /dashboard/api/logs/by-user-day"
+    "GET /dashboard/api/logs/by-user-day",
+    "GET /dashboard/api/activity/summary",
+    "GET /dashboard/api/activity/timeline"
   ],
   "extension": [
     "GET /settings",

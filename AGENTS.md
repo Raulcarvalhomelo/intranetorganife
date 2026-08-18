@@ -44,4 +44,7 @@ Use os seguintes documentos conforme o domínio:
 - `server/test/AGENTS.md`: isolamento e execução de testes.
 - `docs/architecture.md`: visão arquitetural humana.
 - `docs/contracts/`: contratos executáveis e comportamentais.
+- `docs/agents/browser-activity-tracking.md`: instruções da futura atividade agregada do navegador.
+- `docs/contracts/browser-activity.md`: contrato de eventos e sessões de atividade do navegador.
+- `docs/contracts/activity-permissions.md`: autorização e escopo de acesso à atividade.
 - `docs/decisions/`: decisões arquiteturais registradas.

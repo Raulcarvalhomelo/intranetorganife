@@ -484,10 +484,11 @@ async function loadLogs() {
       <td>${esc(r.type || r.action || '-')}</td>
       <td><pre>${esc(JSON.stringify(getLogPayload(r), null, 2))}</pre></td>
     </tr>
-  `).join('');
+    `).join('');
+  if (typeof loadActivity === 'function') loadActivity();
 }
-
 function setDefaultLogsDay() {
+
   const dayInput = document.getElementById('logsDayFilter');
   if (!dayInput || dayInput.value) return;
   dayInput.value = new Date().toISOString().slice(0, 10);

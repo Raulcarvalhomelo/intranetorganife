@@ -13,6 +13,7 @@ const { createKanbanStore } = require('./kanban-store');
 const { createSettingsRouter } = require('./routes/settings');
 const { createReleaseRouter } = require('./routes/releases');
 const { createLogsRouter } = require('./routes/logs');
+const { createActivityRouter } = require('./routes/activity');
 const { createKanbanRouter } = require('./routes/kanban');
 
 const config = loadConfig();
@@ -289,6 +290,10 @@ app.use(createLogsRouter({
   emitUpdate,
   requireAuth: authService.requireAuth
 }));
+app.use(createActivityRouter({
+  logStore,
+  requireAuth: authService.requireAuth
+}));
 app.use(createKanbanRouter({ kanbanStore, normalizeCard: kanbanStore.normalizeCard, emitUpdate }));
 
 function sendDashboardAsset(relativePath, res) {
@@ -302,6 +307,7 @@ app.get('/dashboard/app.js', authService.requireAuth, (req, res) => sendDashboar
 app.get('/dashboard/styles.css', authService.requireAuth, (req, res) => sendDashboardAsset('styles.css', res));
 app.get('/dashboard/dashboard-auth.js', authService.requireAuth, (req, res) => sendDashboardAsset('dashboard-auth.js', res));
 app.get('/dashboard/dashboard-logs.js', authService.requireAuth, (req, res) => sendDashboardAsset('dashboard-logs.js', res));
+app.get('/dashboard/dashboard-activity.js', authService.requireAuth, (req, res) => sendDashboardAsset('dashboard-activity.js', res));
 app.get('/dashboard/dashboard-monitoring.js', authService.requireAuth, (req, res) => sendDashboardAsset('dashboard-monitoring.js', res));
 app.get('/dashboard/dashboard-config.js', authService.requireAuth, (req, res) => sendDashboardAsset('dashboard-config.js', res));
 app.get('/', (req, res) => res.redirect('/dashboard/'));

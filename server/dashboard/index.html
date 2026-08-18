@@ -132,12 +132,30 @@
           <option value="form_submit">Formulário</option>
           <option value="access">Access</option>
         </select>
-        <button id="refreshLogs">Puxar logs</button>
+        <button id="refreshLogs">Atualizar atividade e logs</button>
       </div>
-      <table>
-        <thead><tr><th>Data</th><th>Usuário</th><th>Navegador</th><th>Domínio</th><th>Tipo/Ação</th><th>Dados</th></tr></thead>
-        <tbody id="logsBody"></tbody>
-      </table>
+      <div id="activityPanel" class="activity-panel">
+        <div class="activity-heading">
+          <div><span class="eyebrow">TIME TRACKING</span><h3>Atividade observada no navegador</h3></div>
+          <span id="activityUpdatedAt" class="activity-updated">Aguardando dados</span>
+        </div>
+        <div class="activity-metrics">
+          <div id="activityObserved" class="activity-metric"><strong>--</strong><span>tempo observado</span></div>
+          <div id="activitySessions" class="activity-metric"><strong>--</strong><span>sessões</span></div>
+          <div id="activityUsers" class="activity-metric"><strong>--</strong><span>usuários</span></div>
+          <div id="activityEvents" class="activity-metric"><strong>--</strong><span>eventos considerados</span></div>
+        </div>
+        <div class="activity-grid">
+          <section class="activity-card"><div class="activity-card-title"><h4>Timeline</h4><span>intervalos observados</span></div><div id="activityTimelineBody" class="activity-timeline"><div class="activity-empty">Aguardando dados.</div></div></section>
+          <section class="activity-card"><div class="activity-card-title"><h4>Domínios</h4><span>tempo por domínio</span></div><div class="activity-table-wrap"><table class="activity-table"><thead><tr><th>Domínio</th><th>Tempo</th><th>Sessões</th><th>Eventos</th></tr></thead><tbody id="activityDomainsBody"></tbody></table></div></section>
+        </div>
+      </div>
+      <details class="raw-logs-details" open><summary>Logs brutos para auditoria</summary>
+        <table>
+          <thead><tr><th>Data</th><th>Usuário</th><th>Navegador</th><th>Domínio</th><th>Tipo/Ação</th><th>Dados</th></tr></thead>
+          <tbody id="logsBody"></tbody>
+        </table>
+      </details>
     </section>
 
     <section id="tab-notices" class="tab">
@@ -183,6 +201,7 @@
   <link rel="stylesheet" href="./styles.css" />
   <script src="./dashboard-auth.js"></script>
   <script src="./dashboard-logs.js"></script>
+  <script src="./dashboard-activity.js"></script>
   <script src="./dashboard-monitoring.js"></script>
   <script src="./dashboard-config.js"></script>
   <script src="./app.js"></script>

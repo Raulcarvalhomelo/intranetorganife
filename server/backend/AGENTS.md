@@ -34,6 +34,12 @@ A ingestão por WebSocket deve validar a mensagem, rejeitar lotes inválidos sem
 
 O handshake, as salas e os tipos de mensagem estão definidos em `docs/contracts/websocket.md`. Preserve heartbeat, encerramento de conexões mortas e reconexão dos clientes.
 
+## Atividade do navegador
+
+Antes de implementar o rastreamento agregado, leia `docs/agents/browser-activity-tracking.md`, `docs/contracts/browser-activity.md` e `docs/contracts/activity-permissions.md`. A primeira fase cobre somente atividade dentro do navegador e não autoriza agente Windows, screenshots, captura de teclado ou conteúdo de páginas.
+
+A ingestão futura deve ser idempotente, aceitar lotes, separar eventos brutos de sessões e agregados e aplicar o escopo de equipe no backend. Não confiar em filtros enviados pelo Dashboard para autorizar acesso.
+
 ## Validação
 
 Execute `node --check` nos arquivos alterados e os testes específicos do domínio. Use diretórios temporários para persistência em testes. Nunca corrija um teste apenas reduzindo suas asserções.
