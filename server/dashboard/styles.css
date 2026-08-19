@@ -123,3 +123,33 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: Con
 @media (max-width: 639px) {
   .logs-pagination { align-items: flex-start; flex-direction: column; }
 }
+
+/* Etapa 4: layout isolado da aba Logs */
+.logs-dashboard-layout { display: grid; grid-template-columns: 1fr; gap: 1rem; align-items: start; }
+.logs-control-panel { min-width: 0; padding: 1rem; border: 1px solid #dbe4ee; border-radius: 1rem; background: linear-gradient(160deg, #ffffff 0%, #f7fbff 100%); box-shadow: 0 10px 28px rgba(15, 23, 42, .06); }
+.logs-control-heading { padding-bottom: .875rem; border-bottom: 1px solid #e5edf5; }
+.logs-control-heading h3 { margin: .25rem 0 .35rem; color: #102a43; font-size: 1.05rem; }
+.logs-control-heading p { margin: 0; color: #627d98; font-size: .78rem; line-height: 1.45; }
+.logs-filter-group { display: grid; gap: .4rem; margin-top: 1rem; }
+.logs-filter-group h4 { margin: 0 0 .2rem; color: #334e68; font-size: .78rem; letter-spacing: .04em; text-transform: uppercase; }
+.logs-filter-group label { margin: .15rem 0 0; color: #486581; font-size: .76rem; font-weight: 700; }
+.logs-filter-group input, .logs-filter-group select { width: 100%; min-width: 0; background: #fff; }
+.logs-time-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.logs-control-actions { display: grid; gap: .5rem; margin-top: 1rem; padding-top: .875rem; border-top: 1px solid #e5edf5; }
+.logs-control-actions button { width: 100%; border-color: #2f80ed; background: #2f80ed; color: #fff; font-weight: 700; }
+.logs-control-actions button + button { border-color: #d1d5db; background: #fff; color: #334e68; }
+.logs-control-actions button:hover { filter: brightness(.96); }
+.logs-results-column { min-width: 0; }
+.logs-results-column .activity-panel { margin-top: 0; }
+.logs-results-column .raw-logs-details { margin-top: 1rem; }
+@media (min-width: 768px) {
+  .logs-dashboard-layout { grid-template-columns: minmax(15rem, 18rem) minmax(0, 1fr); }
+  .logs-control-panel { position: sticky; top: 1rem; }
+}
+@media (max-width: 767px) {
+  .logs-control-panel { position: static; }
+  .logs-time-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 420px) {
+  .logs-time-grid { grid-template-columns: 1fr; }
+}

@@ -116,50 +116,74 @@
 
     <section id="tab-logs" class="tab">
       <h2>Logs</h2>
-      <div class="actions-row logs-filters">
-        <select id="logsUserFilter" aria-label="Usuário dos logs">
-          <option value="">Selecione um usuário</option>
-          <option value="__all__">Todos os usuários</option>
-        </select>
-        <input id="logsDayFilter" type="date" />
-        <label>De <input id="logsStartTime" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" /></label>
-        <label>Até <input id="logsEndTime" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" /></label>
-        <input id="logsSearch" placeholder="Buscar por usuário, navegador, domínio, tipo ou dados" />
-        <input id="logsDomainFilter" placeholder="Filtrar domínio (ex: google.com)" />
-        <select id="logsTypeFilter">
-          <option value="">Todos os tipos</option>
-          <option value="navigation">Navegação</option>
-          <option value="click">Clique</option>
-          <option value="download">Download</option>
-          <option value="form_submit">Formulário</option>
-          <option value="access">Access</option>
-        </select>
-        <button id="refreshActivity">Atualizar atividade</button>
-        <button id="refreshLogs">Atualizar logs brutos</button>
+      <div class="logs-dashboard-layout">
+        <aside class="logs-control-panel" aria-label="Painel de controle dos logs">
+          <div class="logs-control-heading">
+            <span class="eyebrow">LOGS</span>
+            <h3>Central de atividade</h3>
+            <p>Escolha o usuário e refine o período antes de consultar os dados.</p>
+          </div>
+          <div class="logs-filter-group">
+            <h4>Usuário e período</h4>
+            <label for="logsUserFilter">Usuário</label>
+            <select id="logsUserFilter" aria-label="Usuário dos logs">
+              <option value="">Selecione um usuário</option>
+              <option value="__all__">Todos os usuários</option>
+            </select>
+            <label for="logsDayFilter">Data</label>
+            <input id="logsDayFilter" type="date" />
+            <div class="logs-time-grid">
+              <label for="logsStartTime">De<input id="logsStartTime" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" /></label>
+              <label for="logsEndTime">Até<input id="logsEndTime" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" /></label>
+            </div>
+          </div>
+          <div class="logs-filter-group">
+            <h4>Refinar consulta</h4>
+            <label for="logsSearch">Busca geral</label>
+            <input id="logsSearch" placeholder="Usuário, navegador, domínio ou dados" />
+            <label for="logsDomainFilter">Domínio</label>
+            <input id="logsDomainFilter" placeholder="Ex.: google.com" />
+            <label for="logsTypeFilter">Tipo de atividade</label>
+            <select id="logsTypeFilter">
+              <option value="">Todos os tipos</option>
+              <option value="navigation">Navegação</option>
+              <option value="click">Clique</option>
+              <option value="download">Download</option>
+              <option value="form_submit">Formulário</option>
+              <option value="access">Access</option>
+            </select>
+          </div>
+          <div class="logs-control-actions">
+            <button id="refreshActivity" type="button">Atualizar atividade</button>
+            <button id="refreshLogs" type="button">Atualizar logs brutos</button>
+          </div>
+        </aside>
+        <div class="logs-results-column">
+          <div id="activityPanel" class="activity-panel">
+            <div class="activity-heading">
+              <div><span class="eyebrow">TIME TRACKING</span><h3>Atividade observada no navegador</h3></div>
+              <span id="activityUpdatedAt" class="activity-updated">Aguardando dados</span>
+            </div>
+            <div class="activity-metrics">
+              <div id="activityObserved" class="activity-metric"><strong>--</strong><span>tempo observado</span></div>
+              <div id="activitySessions" class="activity-metric"><strong>--</strong><span>sessões</span></div>
+              <div id="activityUsers" class="activity-metric"><strong>--</strong><span>usuários</span></div>
+              <div id="activityEvents" class="activity-metric"><strong>--</strong><span>eventos considerados</span></div>
+            </div>
+            <div class="activity-grid">
+              <section class="activity-card"><div class="activity-card-title"><h4>Timeline</h4><span>intervalos observados</span></div><div id="activityTimelineBody" class="activity-timeline"><div class="activity-empty">Aguardando dados.</div></div></section>
+              <section class="activity-card"><div class="activity-card-title"><h4>Domínios</h4><span>tempo por domínio</span></div><div class="activity-table-wrap"><table class="activity-table"><thead><tr><th>Domínio</th><th>Tempo</th><th>Sessões</th><th>Eventos</th></tr></thead><tbody id="activityDomainsBody"></tbody></table></div></section>
+            </div>
+          </div>
+          <details class="raw-logs-details" open><summary>Logs brutos para auditoria</summary>
+            <table>
+              <thead><tr><th>Data</th><th>Usuário</th><th>Navegador</th><th>Domínio</th><th>Tipo/Ação</th><th>Dados</th></tr></thead>
+              <tbody id="logsBody"></tbody>
+            </table>
+            <div class="logs-pagination"><span id="logsPaginationStatus">Nenhum registro carregado</span><button id="loadMoreLogs" type="button" hidden>Carregar mais</button></div>
+          </details>
+        </div>
       </div>
-      <div id="activityPanel" class="activity-panel">
-        <div class="activity-heading">
-          <div><span class="eyebrow">TIME TRACKING</span><h3>Atividade observada no navegador</h3></div>
-          <span id="activityUpdatedAt" class="activity-updated">Aguardando dados</span>
-        </div>
-        <div class="activity-metrics">
-          <div id="activityObserved" class="activity-metric"><strong>--</strong><span>tempo observado</span></div>
-          <div id="activitySessions" class="activity-metric"><strong>--</strong><span>sessões</span></div>
-          <div id="activityUsers" class="activity-metric"><strong>--</strong><span>usuários</span></div>
-          <div id="activityEvents" class="activity-metric"><strong>--</strong><span>eventos considerados</span></div>
-        </div>
-        <div class="activity-grid">
-          <section class="activity-card"><div class="activity-card-title"><h4>Timeline</h4><span>intervalos observados</span></div><div id="activityTimelineBody" class="activity-timeline"><div class="activity-empty">Aguardando dados.</div></div></section>
-          <section class="activity-card"><div class="activity-card-title"><h4>Domínios</h4><span>tempo por domínio</span></div><div class="activity-table-wrap"><table class="activity-table"><thead><tr><th>Domínio</th><th>Tempo</th><th>Sessões</th><th>Eventos</th></tr></thead><tbody id="activityDomainsBody"></tbody></table></div></section>
-        </div>
-      </div>
-      <details class="raw-logs-details" open><summary>Logs brutos para auditoria</summary>
-        <table>
-          <thead><tr><th>Data</th><th>Usuário</th><th>Navegador</th><th>Domínio</th><th>Tipo/Ação</th><th>Dados</th></tr></thead>
-          <tbody id="logsBody"></tbody>
-        </table>
-        <div class="logs-pagination"><span id="logsPaginationStatus">Nenhum registro carregado</span><button id="loadMoreLogs" type="button" hidden>Carregar mais</button></div>
-      </details>
     </section>
 
     <section id="tab-notices" class="tab">
