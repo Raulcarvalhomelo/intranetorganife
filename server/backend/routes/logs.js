@@ -2,6 +2,8 @@
 
 const express = require('express');
 const { normalizeLogEvent, validateLogEvent } = require('../schemas');
+const { buildActivity } = require('../activity');
+const { renderReport } = require('../report-html');
 
 function createLogsRouter(options) {
   const config = options || {};
@@ -36,6 +38,50 @@ function createLogsRouter(options) {
       return res.json(page);
     } catch (error) {
       return res.status(500).json({ message: 'erro-ao-consultar-logs' });
+    }
+  }
+
+  function normalizeReportUser(value) {
+    return String(value !== undefined && value !== null ? value : '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  function getLogUser(row) {
+    return String(row.browserUser || row.windowsUser || row.user || row.user_id || '').trim();
+  }
+
+  async function exportHtml(req, res) {
+    try {
+      const requestedUser = String(req.query.user || '').trim();
+      if (!requestedUser || requestedUser === '__all__') return res.status(400).json({ message: 'selecione-um-usuario-especifico' });
+      if (logStore && typeof logStore.flush === 'function') await logStore.flush();
+      const rows = await logStore.readLogs({
+        limit: 5000,
+        user: requestedUser,
+        q: req.query.q,
+        type: req.query.type,
+        domain: req.query.domain,
+        startTime: req.query.startTime,
+        endTime: req.query.endTime,
+        day: req.query.day
+      });
+      const normalizedRequestedUser = normalizeReportUser(requestedUser);
+      const scopedRows = rows.filter((row) => normalizeReportUser(getLogUser(row)) === normalizedRequestedUser);
+      const activity = buildActivity(scopedRows);
+      const safeName = normalizedRequestedUser.replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'usuario';
+      res.set('Content-Type', 'text/html; charset=utf-8');
+      res.set('Content-Disposition', `attachment; filename="relatorio-${safeName}.html"`);
+      return res.send(renderReport({
+        user: requestedUser,
+        day: req.query.day || 'período selecionado',
+        rows: scopedRows,
+        activity
+      }));
+    } catch (error) {
+      return res.status(500).json({ message: 'erro-ao-exportar-relatorio' });
     }
   }
 
@@ -81,6 +127,7 @@ function createLogsRouter(options) {
   router.get('/dashboard/api/logs', requireAuth, listLogs);
   router.get('/dashboard/api/logs/by-user-day', requireAuth, listLogs);
   router.get('/dashboard/api/logs/users', requireAuth, listLogUsers);
+  router.get('/dashboard/api/logs/export-html', requireAuth, exportHtml);
 
   return router;
 }

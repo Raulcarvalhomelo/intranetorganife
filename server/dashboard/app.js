@@ -440,6 +440,70 @@ function formatLogDateTime(timestamp) {
   }).format(date);
 }
 
+function updateExportButtonState() {
+  const button = document.getElementById('exportHtmlReport');
+  const user = document.getElementById('logsUserFilter');
+  if (!button) return;
+  const value = String(user ? user.value : '').trim();
+  button.disabled = !value || value === '__all__';
+}
+
+async function exportSelectedUserReport() {
+  const user = document.getElementById('logsUserFilter');
+  const day = document.getElementById('logsDayFilter');
+  const startTime = document.getElementById('logsStartTime');
+  const endTime = document.getElementById('logsEndTime');
+  const search = document.getElementById('logsSearch');
+  const domain = document.getElementById('logsDomainFilter');
+  const type = document.getElementById('logsTypeFilter');
+  const userValue = String(user ? user.value : '').trim();
+  if (!userValue || userValue === '__all__') {
+    setLogsFilterError('Selecione um usuário específico para exportar o relatório HTML.');
+    return;
+  }
+  const startValue = String(startTime ? startTime.value : '').trim();
+  const endValue = String(endTime ? endTime.value : '').trim();
+  if (!isValidOptionalTime(startValue) || !isValidOptionalTime(endValue)) {
+    setLogsFilterError('Informe horários válidos no formato HH:MM, entre 00:00 e 23:59.');
+    return;
+  }
+  const params = new URLSearchParams({ user: userValue });
+  const values = {
+    day: day ? day.value : '',
+    startTime: startValue,
+    endTime: endValue,
+    q: search ? search.value.trim() : '',
+    domain: domain ? domain.value.trim() : '',
+    type: type ? type.value : ''
+  };
+  Object.keys(values).forEach((key) => {
+    if (values[key]) params.set(key, values[key]);
+  });
+  try {
+    const response = await fetch(`/dashboard/api/logs/export-html?${params.toString()}`, { credentials: 'same-origin' });
+    if (!response.ok) {
+      let message = 'Não foi possível gerar o relatório HTML.';
+      try {
+        const data = await response.json();
+        if (data && data.message) message = data.message;
+      } catch (error) {}
+      throw new Error(message);
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `relatorio-${userValue.toLowerCase().replace(/[^a-z0-9_-]+/g, '-') || 'usuario'}.html`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setLogsFilterError('');
+  } catch (error) {
+    setLogsFilterError(error && error.message ? error.message : 'Não foi possível gerar o relatório HTML.');
+  }
+}
+
 function setLogsFilterError(message) {
   const element = document.getElementById('logsFilterError');
   if (!element) return;
@@ -465,6 +529,7 @@ async function loadLogUsers() {
       + users.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('')
       + '<option value="__all__">Todos os usuários</option>';
     if (currentValue === '__all__' || users.indexOf(currentValue) >= 0) user.value = currentValue;
+    updateExportButtonState();
   } catch (error) {
     user.innerHTML = '<option value="">Não foi possível carregar usuários</option><option value="__all__">Todos os usuários</option>';
   }
@@ -602,6 +667,7 @@ function setupLogsFilters() {
   const refresh = document.getElementById('refreshLogs');
   const refreshActivity = document.getElementById('refreshActivity');
   const loadMore = document.getElementById('loadMoreLogs');
+  const exportReport = document.getElementById('exportHtmlReport');
   const triggerByEnter = (event) => {
     if (event && event.key === 'Enter') loadLogs();
   };
@@ -624,7 +690,12 @@ function setupLogsFilters() {
       }
     };
   };
-  if (user) user.onkeydown = triggerByEnter;
+  if (user) {
+    user.onkeydown = triggerByEnter;
+    user.onchange = () => updateExportButtonState();
+  }
+  if (exportReport) exportReport.onclick = () => exportSelectedUserReport();
+  updateExportButtonState();
   if (day) day.onchange = () => loadLogUsers();
   bindTimeInput(startTime);
   bindTimeInput(endTime);

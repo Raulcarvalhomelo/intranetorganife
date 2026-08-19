@@ -153,3 +153,4 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: Con
 @media (max-width: 420px) {
   .logs-time-grid { grid-template-columns: 1fr; }
 }
+.logs-control-actions button:disabled { border-color: #dbe4ee; background: #e5edf5; color: #829ab1; cursor: not-allowed; filter: none; }
