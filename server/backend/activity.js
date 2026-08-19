@@ -1,5 +1,7 @@
 'use strict';
 
+const { classifyActivityType } = require('./activity-types');
+
 const SESSION_GAP_MS = 10 * 60 * 1000;
 const EVENT_TAIL_MS = 2 * 60 * 1000;
 const MAX_EVENT_CONTRIBUTION_MS = 10 * 60 * 1000;
@@ -56,6 +58,7 @@ function normalizeEvent(log, index) {
     browser: String(item.browser || 'Desconhecido'),
     domain: normalizeDomain(item),
     action,
+    activityType: classifyActivityType(item).key,
     timestampMs,
     timestamp: new Date(timestampMs).toISOString(),
     url: String(details.url || item.url || ''),
@@ -131,12 +134,17 @@ function aggregateDomains(sessions) {
 
 function buildActivity(logs) {
   const events = uniqueEvents(logs);
-  const sessions = createSessions(events);
+  const documents = events.filter((event) => event.activityType === 'documents').length;
+  const downloads = events.filter((event) => event.activityType === 'download').length;
+  const sessionEvents = events.filter((event) => event.activityType !== 'documents' && event.activityType !== 'download');
+  const sessions = createSessions(sessionEvents);
   const users = new Set(events.map((event) => event.user));
   const observedMs = sessions.reduce((total, session) => total + session.durationMs, 0);
   return {
     generatedAt: new Date().toISOString(),
     events: events.length,
+    documents,
+    downloads,
     sessions: sessions.length,
     users: users.size,
     observedMs,

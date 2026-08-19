@@ -43,6 +43,8 @@
     renderMetric('activitySessions', String(source.sessions || 0), 'sessões');
     renderMetric('activityUsers', String(source.users || 0), 'usuários');
     renderMetric('activityEvents', String(source.events || 0), 'eventos considerados');
+    renderMetric('activityDocuments', String(source.documents || 0), 'documentos');
+    renderMetric('activityDownloads', String(source.downloads || 0), 'downloads');
     const domains = Array.isArray(source.domains) ? source.domains : [];
     const domainBody = document.getElementById('activityDomainsBody');
     if (domainBody) {
@@ -85,6 +87,8 @@
       renderMetric('activitySessions', '--', 'sessões');
       renderMetric('activityUsers', '--', 'usuários');
       renderMetric('activityEvents', '--', 'eventos considerados');
+      renderMetric('activityDocuments', '--', 'documentos');
+      renderMetric('activityDownloads', '--', 'downloads');
       return;
     }
     container.classList.add('is-loading');
