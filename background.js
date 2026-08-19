@@ -317,7 +317,11 @@ function loadSettingsFromStorage() {
   return settingsStoragePromise;
 }
 
-loadSettingsFromStorage();
+loadSettingsFromStorage().then(function () {
+  setupWebSocket();
+}).catch(function () {
+  setupWebSocket();
+});
 
 function storageLocalGetAsync(keys) {
   return new Promise((resolve) => {
@@ -534,10 +538,18 @@ let settingsWebSocket = null;
 let wsRetryTimer = null;
 let wsRetryDelay = 1000;
 let wsLogBatch = [];
+let wsLogInFlight = [];
 let wsLogFlushTimer = null;
 
+function ensureWebSocketConnection() {
+  if (settingsWebSocket && (settingsWebSocket.readyState === 0 || settingsWebSocket.readyState === 1)) return;
+  if (!wsRetryTimer) setupWebSocket();
+}
+
 function scheduleWsLogFlush() {
-  if (wsLogFlushTimer || !wsLogBatch.length) return;
+  if (!wsLogBatch.length) return;
+  ensureWebSocketConnection();
+  if (wsLogFlushTimer) return;
   wsLogFlushTimer = setTimeout(() => {
     wsLogFlushTimer = null;
     flushWsLogBatch();
@@ -545,23 +557,30 @@ function scheduleWsLogFlush() {
 }
 
 function flushWsLogBatch() {
-  if (!settingsWebSocket || settingsWebSocket.readyState !== 1 || !wsLogBatch.length) {
+  if (!wsLogBatch.length) return false;
+  if (!settingsWebSocket || settingsWebSocket.readyState !== 1) {
+    ensureWebSocketConnection();
     scheduleWsLogFlush();
     return false;
   }
   const batch = wsLogBatch.splice(0, 50);
+  wsLogInFlight = wsLogInFlight.concat(batch);
   try {
     settingsWebSocket.send(JSON.stringify({ type: 'logs_batch', logs: batch }));
     if (wsLogBatch.length) flushWsLogBatch();
     return true;
   } catch (error) {
+    wsLogInFlight = wsLogInFlight.slice(0, Math.max(0, wsLogInFlight.length - batch.length));
     wsLogBatch = batch.concat(wsLogBatch);
+    try { settingsWebSocket.close(); } catch (closeError) {}
+    scheduleWsLogFlush();
     return false;
   }
 }
 
 function queueWsLog(log) {
   if (!log) return;
+  ensureWebSocketConnection();
   wsLogBatch.push(log);
   if (wsLogBatch.length >= 50) flushWsLogBatch();
   else scheduleWsLogFlush();
@@ -583,6 +602,12 @@ function setupWebSocket() {
     settingsWebSocket.onmessage = async (event) => {
       let message = {};
       try { message = JSON.parse(String(event.data || '{}')); } catch (error) { return; }
+      if (message.type === 'logs_ack') {
+        const acknowledgedCount = Math.max(0, Number(message.count) || 0);
+        if (acknowledgedCount > 0) wsLogInFlight.splice(0, acknowledgedCount);
+        if (wsLogBatch.length) flushWsLogBatch();
+        return;
+      }
       if (message.type === 'settings_state') {
         applySettingsFromDashboard(message.payload || {});
         return;
@@ -598,6 +623,11 @@ function setupWebSocket() {
     settingsWebSocket.onerror = () => { try { settingsWebSocket.close(); } catch (error) {} };
     settingsWebSocket.onclose = () => {
       settingsWebSocket = null;
+      if (wsLogInFlight.length) {
+        wsLogBatch = wsLogInFlight.concat(wsLogBatch);
+        wsLogInFlight = [];
+      }
+      if (wsLogBatch.length) scheduleWsLogFlush();
       wsRetryTimer = setTimeout(setupWebSocket, wsRetryDelay);
       wsRetryDelay = Math.min(wsRetryDelay * 2, 30000);
     };
