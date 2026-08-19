@@ -95,11 +95,16 @@ function createLogStore(options) {
   const logsDir = path.resolve(String(config.logsDir || path.join(__dirname, '../database/logs')));
   const retentionDays = Math.max(1, Number(config.retentionDays) || 3);
   const flushIntervalMs = Math.max(200, Number(config.flushIntervalMs) || 1000);
+  const DEDUPE_MAX_IDS = 50000;
   let writer = createNdjsonWriter(logsDir);
   let queue = [];
   let timer = null;
   let flushing = null;
   let cleanupTimer = null;
+  const knownLogIds = new Set();
+  const knownLogIdOrder = [];
+  let knownLogIdCursor = 0;
+  let dedupeLoaded = false;
 
   function dayKey(value) {
     const date = new Date(value || Date.now());
@@ -115,6 +120,53 @@ function createLogStore(options) {
       keys.push(date.toISOString().slice(0, 10));
     }
     return keys;
+  }
+
+  function rememberLogId(id) {
+    const key = String(id === undefined || id === null ? '' : id);
+    if (!key || knownLogIds.has(key)) return false;
+    knownLogIds.add(key);
+    knownLogIdOrder.push(key);
+    while (knownLogIdOrder.length - knownLogIdCursor > DEDUPE_MAX_IDS) {
+      const oldest = knownLogIdOrder[knownLogIdCursor];
+      knownLogIdCursor += 1;
+      knownLogIds.delete(oldest);
+    }
+    if (knownLogIdCursor > 1000 && knownLogIdCursor * 2 > knownLogIdOrder.length) {
+      knownLogIdOrder.splice(0, knownLogIdCursor);
+      knownLogIdCursor = 0;
+    }
+    return true;
+  }
+
+  async function loadRecentLogIds() {
+    if (dedupeLoaded) return;
+    dedupeLoaded = true;
+    const days = retentionDayKeys().slice(0, 2);
+    for (let dayIndex = 0; dayIndex < days.length; dayIndex += 1) {
+      const filePath = path.join(logsDir, `${days[dayIndex]}.ndjson`);
+      let input;
+      try {
+        input = fs.createReadStream(filePath, { encoding: 'utf8' });
+      } catch (error) {
+        continue;
+      }
+      input.on('error', () => {});
+      const lines = readline.createInterface({ input, crlfDelay: Infinity });
+      try {
+        for await (const line of lines) {
+          const raw = String(line || '').trim();
+          if (!raw) continue;
+          let parsed;
+          try { parsed = JSON.parse(raw); } catch (error) { parsed = null; }
+          if (parsed && parsed.id !== undefined && parsed.id !== null) rememberLogId(parsed.id);
+        }
+      } catch (error) {
+        if (!error || error.code !== 'ENOENT') throw error;
+      } finally {
+        input.destroy();
+      }
+    }
   }
 
   function normalizeLog(item, index) {
@@ -176,7 +228,8 @@ function createLogStore(options) {
   function queueLogs(items) {
     const source = Array.isArray(items) ? items : [items];
     const normalized = source.filter(Boolean).map((item, index) => normalizeLog(item, index));
-    queue = queue.concat(normalized);
+    const accepted = normalized.filter((log) => rememberLogId(log.id));
+    queue = queue.concat(accepted);
     if (queue.length >= 50) scheduleFlush(0);
     else if (queue.length) scheduleFlush(flushIntervalMs);
     return normalized;
@@ -303,6 +356,10 @@ function createLogStore(options) {
     await flush();
     await writer.closeAll();
     writer = createNdjsonWriter(logsDir);
+    knownLogIds.clear();
+    knownLogIdOrder.length = 0;
+    knownLogIdCursor = 0;
+    dedupeLoaded = true;
     await fs.promises.mkdir(logsDir, { recursive: true });
     const entries = await fs.promises.readdir(logsDir, { withFileTypes: true });
     await Promise.all(entries.filter((entry) => entry.isFile() && /\.ndjson$/i.test(entry.name)).map((entry) => fs.promises.unlink(path.join(logsDir, entry.name)).catch(() => {})));
@@ -313,6 +370,7 @@ function createLogStore(options) {
 
   async function initialize() {
     await writer.ensureDirectory();
+    await loadRecentLogIds();
     await cleanupOldFiles();
     cleanupTimer = setInterval(() => cleanupOldFiles().catch(() => {}), 60 * 60 * 1000);
     cleanupTimer.unref();
