@@ -613,7 +613,7 @@ function renderLogsRows(rows) {
       <td>${esc(getLogUser(r))}</td>
       <td>${esc(getLogBrowser(r))}</td>
       <td>${esc(getLogDomain(r))}</td>
-      <td>${esc(r.type || r.action || '-')}</td>
+      <td>${esc(r.typeLabel || r.displayType || r.type || r.action || '-')}</td>
       <td><button type="button" class="log-details-toggle" data-log-index="${index}">Detalhes</button></td>
     </tr>
   `).join('');

@@ -4,6 +4,7 @@ const express = require('express');
 const { normalizeLogEvent, validateLogEvent } = require('../schemas');
 const { buildActivity } = require('../activity');
 const { renderReport } = require('../report-html');
+const { classifyActivityType } = require('../activity-types');
 
 function createLogsRouter(options) {
   const config = options || {};
@@ -35,7 +36,15 @@ function createLogsRouter(options) {
         endTime: req.query.endTime,
         day: req.query.day
       });
-      return res.json(page);
+      const items = (page.items || []).map((row) => {
+        const classification = classifyActivityType(row);
+        return Object.assign({}, row, {
+          typeLabel: classification.label,
+          displayType: classification.label,
+          originalType: classification.originalType
+        });
+      });
+      return res.json(Object.assign({}, page, { items }));
     } catch (error) {
       return res.status(500).json({ message: 'erro-ao-consultar-logs' });
     }
