@@ -202,6 +202,7 @@ function createLogStore(options) {
     const filePath = path.join(logsDir, `${day}.ndjson`);
     let input;
     try { input = fs.createReadStream(filePath, { encoding: 'utf8' }); } catch (error) { return result; }
+    input.on('error', () => {});
     const lines = readline.createInterface({ input, crlfDelay: Infinity });
     try {
       for await (const line of lines) {
@@ -233,6 +234,9 @@ function createLogStore(options) {
         result.push(parsed);
         if (result.length > filters.limit) result.shift();
       }
+    } catch (error) {
+      if (!error || error.code !== 'ENOENT') throw error;
+      return [];
     } finally {
       input.destroy();
     }

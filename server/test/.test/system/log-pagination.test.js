@@ -41,6 +41,22 @@ test('log-store pagina logs por cursor sem repetir registros', async () => {
   }
 });
 
+test('log-store retorna página vazia quando o arquivo diário não existe', async () => {
+  const logsDir = tempDir();
+  const store = createLogStore({ logsDir, retentionDays: 3 });
+  try {
+    await store.initialize();
+    const page = await store.readLogsPage({ day: '2026-08-19', limit: 50 });
+    assert.deepEqual(page.items, []);
+    assert.equal(page.hasMore, false);
+    const secondPage = await store.readLogsPage({ day: '2026-08-19', limit: 50 });
+    assert.deepEqual(secondPage.items, []);
+  } finally {
+    await store.close();
+    fs.rmSync(logsDir, { recursive: true, force: true });
+  }
+});
+
 test('log-store aplica usuário, domínio, tipo e horário durante a leitura', async () => {
   const logsDir = tempDir();
   const store = createLogStore({ logsDir, retentionDays: 3 });
