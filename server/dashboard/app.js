@@ -10,6 +10,7 @@ let logsCursor = null;
 let logsRows = [];
 let logsLoading = false;
 let logsAbortController = null;
+let openLogDetailsIndex = null;
 let sessionInfo = { username: '', role: 'admin' };
 const VIEWER_ALLOWED_TABS = ['requests', 'logs', 'notices'];
 
@@ -502,27 +503,38 @@ async function loadLogs(options) {
 function renderLogsRows(rows) {
   const body = document.getElementById('logsBody');
   if (!body) return;
-  body.innerHTML = rows.map((r) => `
+  openLogDetailsIndex = null;
+  body.innerHTML = rows.map((r, index) => `
     <tr>
       <td>${esc(formatLogDateTime(r.timestamp))}</td>
       <td>${esc(getLogUser(r))}</td>
       <td>${esc(getLogBrowser(r))}</td>
       <td>${esc(getLogDomain(r))}</td>
       <td>${esc(r.type || r.action || '-')}</td>
-      <td><button type="button" class="log-details-toggle" data-log-index="${rows.indexOf(r)}">Detalhes</button></td>
+      <td><button type="button" class="log-details-toggle" data-log-index="${index}">Detalhes</button></td>
     </tr>
   `).join('');
   body.querySelectorAll('.log-details-toggle').forEach((button) => {
     button.onclick = () => {
-      const row = rows[Number(button.dataset.logIndex)];
-      const details = button.closest('tr').querySelector('.log-details');
-      if (details) details.remove();
-      else {
-        const detailRow = document.createElement('tr');
-        detailRow.className = 'log-details';
-        detailRow.innerHTML = `<td colspan="6"><pre>${esc(JSON.stringify(getLogPayload(row), null, 2))}</pre></td>`;
-        button.closest('tr').after(detailRow);
+      const index = Number(button.dataset.logIndex);
+      const row = rows[index];
+      const currentDetail = body.querySelector('.log-details');
+      if (currentDetail && openLogDetailsIndex === index) {
+        currentDetail.remove();
+        openLogDetailsIndex = null;
+        button.textContent = 'Detalhes';
+        return;
       }
+      if (currentDetail) currentDetail.remove();
+      body.querySelectorAll('.log-details-toggle').forEach((item) => {
+        item.textContent = 'Detalhes';
+      });
+      const detailRow = document.createElement('tr');
+      detailRow.className = 'log-details';
+      detailRow.innerHTML = `<td colspan="6"><pre>${esc(JSON.stringify(getLogPayload(row), null, 2))}</pre></td>`;
+      button.closest('tr').after(detailRow);
+      openLogDetailsIndex = index;
+      button.textContent = 'Ocultar';
     };
   });
 }
