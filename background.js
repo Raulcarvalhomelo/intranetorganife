@@ -537,16 +537,72 @@ void maybeCleanupActivityLogs(true);
 let settingsWebSocket = null;
 let wsRetryTimer = null;
 let wsRetryDelay = 1000;
+const WS_LOG_QUEUE_MAX_EVENTS = 2000;
+const WS_LOG_QUEUE_MAX_BYTES = 2 * 1024 * 1024;
+const WS_LOG_QUEUE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 let wsLogBatch = [];
+let wsLogBatchBytes = 0;
 let wsLogInFlight = [];
+let wsLogInFlightBytes = 0;
 let wsLogFlushTimer = null;
+let wsLogQueueDroppedCount = 0;
 
 function ensureWebSocketConnection() {
   if (settingsWebSocket && (settingsWebSocket.readyState === 0 || settingsWebSocket.readyState === 1)) return;
   if (!wsRetryTimer) setupWebSocket();
 }
 
+function estimateWsLogBytes(log) {
+  if (!log) return 0;
+  let detailsText = '';
+  try {
+    detailsText = JSON.stringify(log.details || {});
+  } catch (error) {
+    detailsText = '';
+  }
+  return 160
+    + String(log.id || '').length
+    + String(log.action || '').length
+    + String(log.browserUser || '').length
+    + String(log.windowsUser || '').length
+    + String(log.timestamp || '').length
+    + String(log.browser || '').length
+    + detailsText.length;
+}
+
+function getWsLogTimestampMs(log) {
+  if (!log) return 0;
+  const direct = Number(log.timestampMs);
+  if (Number.isFinite(direct) && direct > 0) return direct;
+  const parsed = new Date(log.timestamp || 0).getTime();
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function removeOldestWsLog() {
+  if (!wsLogBatch.length) return false;
+  const removed = wsLogBatch.shift();
+  wsLogBatchBytes = Math.max(0, wsLogBatchBytes - estimateWsLogBytes(removed));
+  wsLogQueueDroppedCount += 1;
+  return true;
+}
+
+function trimWsLogBatch() {
+  const cutoff = Date.now() - WS_LOG_QUEUE_MAX_AGE_MS;
+  while (wsLogBatch.length) {
+    const timestampMs = getWsLogTimestampMs(wsLogBatch[0]);
+    if (!timestampMs || timestampMs >= cutoff) break;
+    removeOldestWsLog();
+  }
+  while (wsLogBatch.length + wsLogInFlight.length > WS_LOG_QUEUE_MAX_EVENTS) {
+    if (!removeOldestWsLog()) break;
+  }
+  while (wsLogBatchBytes + wsLogInFlightBytes > WS_LOG_QUEUE_MAX_BYTES) {
+    if (!removeOldestWsLog()) break;
+  }
+}
+
 function scheduleWsLogFlush() {
+  trimWsLogBatch();
   if (!wsLogBatch.length) return;
   ensureWebSocketConnection();
   if (wsLogFlushTimer) return;
@@ -557,6 +613,7 @@ function scheduleWsLogFlush() {
 }
 
 function flushWsLogBatch() {
+  trimWsLogBatch();
   if (!wsLogBatch.length) return false;
   if (!settingsWebSocket || settingsWebSocket.readyState !== 1) {
     ensureWebSocketConnection();
@@ -564,14 +621,21 @@ function flushWsLogBatch() {
     return false;
   }
   const batch = wsLogBatch.splice(0, 50);
+  let batchBytes = 0;
+  batch.forEach((item) => { batchBytes += estimateWsLogBytes(item); });
+  wsLogBatchBytes = Math.max(0, wsLogBatchBytes - batchBytes);
   wsLogInFlight = wsLogInFlight.concat(batch);
+  wsLogInFlightBytes += batchBytes;
   try {
     settingsWebSocket.send(JSON.stringify({ type: 'logs_batch', logs: batch }));
     if (wsLogBatch.length) flushWsLogBatch();
     return true;
   } catch (error) {
     wsLogInFlight = wsLogInFlight.slice(0, Math.max(0, wsLogInFlight.length - batch.length));
+    wsLogInFlightBytes = Math.max(0, wsLogInFlightBytes - batchBytes);
     wsLogBatch = batch.concat(wsLogBatch);
+    wsLogBatchBytes += batchBytes;
+    trimWsLogBatch();
     try { settingsWebSocket.close(); } catch (closeError) {}
     scheduleWsLogFlush();
     return false;
@@ -582,6 +646,8 @@ function queueWsLog(log) {
   if (!log) return;
   ensureWebSocketConnection();
   wsLogBatch.push(log);
+  wsLogBatchBytes += estimateWsLogBytes(log);
+  trimWsLogBatch();
   if (wsLogBatch.length >= 50) flushWsLogBatch();
   else scheduleWsLogFlush();
 }
@@ -603,8 +669,14 @@ function setupWebSocket() {
       let message = {};
       try { message = JSON.parse(String(event.data || '{}')); } catch (error) { return; }
       if (message.type === 'logs_ack') {
-        const acknowledgedCount = Math.max(0, Number(message.count) || 0);
-        if (acknowledgedCount > 0) wsLogInFlight.splice(0, acknowledgedCount);
+        const acknowledgedCount = Math.max(0, Math.min(wsLogInFlight.length, Number(message.count) || 0));
+        if (acknowledgedCount > 0) {
+          const acknowledged = wsLogInFlight.splice(0, acknowledgedCount);
+          acknowledged.forEach((item) => {
+            wsLogInFlightBytes = Math.max(0, wsLogInFlightBytes - estimateWsLogBytes(item));
+          });
+        }
+        trimWsLogBatch();
         if (wsLogBatch.length) flushWsLogBatch();
         return;
       }
@@ -625,7 +697,10 @@ function setupWebSocket() {
       settingsWebSocket = null;
       if (wsLogInFlight.length) {
         wsLogBatch = wsLogInFlight.concat(wsLogBatch);
+        wsLogBatchBytes += wsLogInFlightBytes;
         wsLogInFlight = [];
+        wsLogInFlightBytes = 0;
+        trimWsLogBatch();
       }
       if (wsLogBatch.length) scheduleWsLogFlush();
       wsRetryTimer = setTimeout(setupWebSocket, wsRetryDelay);
