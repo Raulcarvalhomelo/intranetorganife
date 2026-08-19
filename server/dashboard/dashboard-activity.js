@@ -14,7 +14,6 @@
   function activityFilters() {
     const day = document.getElementById('logsDayFilter');
     const user = document.getElementById('logsUserFilter');
-    const allUsers = document.getElementById('logsAllUsers');
     const type = document.getElementById('logsTypeFilter');
     const search = document.getElementById('logsSearch');
     const domain = document.getElementById('logsDomainFilter');
@@ -22,8 +21,9 @@
     const endTime = document.getElementById('logsEndTime');
     const params = new URLSearchParams({ limit: '500' });
     const userValue = String(user ? user.value : '').trim();
-    if (allUsers && allUsers.checked) params.set('allUsers', '1');
-    else if (userValue.indexOf(',') < 0 && userValue) params.set('user', userValue);
+    if (!userValue) return null;
+    if (userValue === '__all__') params.set('allUsers', '1');
+    else params.set('user', userValue);
     if (day && day.value) params.set('day', day.value);
     if (type && type.value) params.set('type', type.value);
     if (search && search.value.trim()) params.set('q', search.value.trim());
@@ -66,9 +66,23 @@
   async function loadActivity() {
     const container = document.getElementById('activityPanel');
     if (!container || typeof api !== 'function') return;
+    const filters = activityFilters();
+    if (!filters) {
+      const timelineBody = document.getElementById('activityTimelineBody');
+      const domainBody = document.getElementById('activityDomainsBody');
+      if (timelineBody) timelineBody.innerHTML = '<div class="activity-empty">Selecione um usuário para visualizar a atividade.</div>';
+      if (domainBody) domainBody.innerHTML = '<tr><td colspan="4" class="empty-cell">Selecione um usuário para visualizar os domínios.</td></tr>';
+      const updated = document.getElementById('activityUpdatedAt');
+      if (updated) updated.textContent = 'Aguardando usuário';
+      renderMetric('activityObserved', '--', 'tempo observado');
+      renderMetric('activitySessions', '--', 'sessões');
+      renderMetric('activityUsers', '--', 'usuários');
+      renderMetric('activityEvents', '--', 'eventos considerados');
+      return;
+    }
     container.classList.add('is-loading');
     try {
-      const data = await api(`/activity/summary?${activityFilters().toString()}`);
+      const data = await api(`/activity/summary?${filters.toString()}`);
       renderActivity(data);
     } catch (error) {
       const timelineBody = document.getElementById('activityTimelineBody');

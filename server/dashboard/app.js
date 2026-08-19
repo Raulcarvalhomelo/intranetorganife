@@ -440,6 +440,25 @@ function formatLogDateTime(timestamp) {
   }).format(date);
 }
 
+async function loadLogUsers() {
+  const user = document.getElementById('logsUserFilter');
+  if (!user || typeof api !== 'function') return;
+  const currentValue = String(user.value || '');
+  const day = document.getElementById('logsDayFilter');
+  const params = new URLSearchParams();
+  if (day && day.value) params.set('day', day.value);
+  try {
+    const data = await api(`/logs/users?${params.toString()}`);
+    const users = data && Array.isArray(data.users) ? data.users : [];
+    user.innerHTML = '<option value="">Selecione um usuário</option>'
+      + users.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('')
+      + '<option value="__all__">Todos os usuários</option>';
+    if (currentValue === '__all__' || users.indexOf(currentValue) >= 0) user.value = currentValue;
+  } catch (error) {
+    user.innerHTML = '<option value="">Não foi possível carregar usuários</option><option value="__all__">Todos os usuários</option>';
+  }
+}
+
 async function loadLogs(options) {
   const settings = options || {};
   const append = settings.append === true;
@@ -450,7 +469,6 @@ async function loadLogs(options) {
   }
   const params = new URLSearchParams({ limit: '50' });
   const user = document.getElementById('logsUserFilter');
-  const allUsers = document.getElementById('logsAllUsers');
   const day = document.getElementById('logsDayFilter');
   const startTime = document.getElementById('logsStartTime');
   const endTime = document.getElementById('logsEndTime');
@@ -458,17 +476,21 @@ async function loadLogs(options) {
   const domain = document.getElementById('logsDomainFilter');
   const type = document.getElementById('logsTypeFilter');
   const userValue = String(user ? user.value : '').trim();
-  const isAllUsers = Boolean(allUsers && allUsers.checked);
+  const isAllUsers = userValue === '__all__';
   const dayValue = String(day ? day.value : '').trim();
   const startTimeValue = String(startTime ? startTime.value : '').trim();
   const endTimeValue = String(endTime ? endTime.value : '').trim();
   const searchValue = String(search ? search.value : '').trim();
   const domainValue = String(domain ? domain.value : '').trim();
   const typeValue = String(type ? type.value : '').trim();
-  const selectedUsers = userValue.split(',').map((entry) => entry.trim()).filter(Boolean);
+  if (!userValue) {
+    const body = document.getElementById('logsBody');
+    if (body && !append) body.innerHTML = '<tr><td colspan="6" class="empty-cell">Selecione um usuário para carregar os logs.</td></tr>';
+    updateLogsPagination(false);
+    return;
+  }
   if (isAllUsers) params.set('allUsers', '1');
-  else if (selectedUsers.length > 1) params.set('users', selectedUsers.join(','));
-  else if (selectedUsers.length === 1) params.set('user', selectedUsers[0]);
+  else params.set('user', userValue);
   if (dayValue) params.set('day', dayValue);
   if (startTimeValue) params.set('startTime', startTimeValue);
   if (endTimeValue) params.set('endTime', endTimeValue);
@@ -555,7 +577,6 @@ function setDefaultLogsDay() {
 function setupLogsFilters() {
   setDefaultLogsDay();
   const user = document.getElementById('logsUserFilter');
-  const allUsers = document.getElementById('logsAllUsers');
   const day = document.getElementById('logsDayFilter');
   const startTime = document.getElementById('logsStartTime');
   const endTime = document.getElementById('logsEndTime');
@@ -584,18 +605,7 @@ function setupLogsFilters() {
     };
   };
   if (user) user.onkeydown = triggerByEnter;
-  if (allUsers) {
-    if (user) {
-      allUsers.onchange = () => {
-        user.disabled = allUsers.checked;
-        if (allUsers.checked) user.value = '';
-      };
-      user.disabled = allUsers.checked;
-    } else {
-      allUsers.onchange = () => loadLogs();
-    }
-  }
-  if (day) day.onchange = () => {};
+  if (day) day.onchange = () => loadLogUsers();
   bindTimeInput(startTime);
   bindTimeInput(endTime);
   if (search) search.onkeydown = triggerByEnter;
@@ -715,6 +725,7 @@ async function boot() {
     if (!isViewerSession()) initConfigEvents();
     initNoticesEvents();
     setupLogsFilters();
+    await loadLogUsers();
     setupRequestsFilters();
     if (!isViewerSession()) {
       document.getElementById('saveSettings').onclick = saveSettings;

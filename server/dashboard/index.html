@@ -117,8 +117,10 @@
     <section id="tab-logs" class="tab">
       <h2>Logs</h2>
       <div class="actions-row logs-filters">
-        <input id="logsUserFilter" placeholder="Usuários (ex: joao,maria)" />
-        <label><input id="logsAllUsers" type="checkbox" /> Todos os usuários</label>
+        <select id="logsUserFilter" aria-label="Usuário dos logs">
+          <option value="">Selecione um usuário</option>
+          <option value="__all__">Todos os usuários</option>
+        </select>
         <input id="logsDayFilter" type="date" />
         <label>De <input id="logsStartTime" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" /></label>
         <label>Até <input id="logsEndTime" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" /></label>

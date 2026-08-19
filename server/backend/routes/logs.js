@@ -39,6 +39,26 @@ function createLogsRouter(options) {
     }
   }
 
+  async function listLogUsers(req, res) {
+    try {
+      if (logStore && typeof logStore.flush === 'function') await logStore.flush();
+      const rows = await logStore.readLogs({
+        limit: 5000,
+        day: req.query.day
+      });
+      const users = new Map();
+      rows.forEach((row) => {
+        const value = String(row.browserUser || row.windowsUser || row.user || row.user_id || '').trim();
+        if (!value) return;
+        const key = value.toLocaleLowerCase('pt-BR');
+        if (!users.has(key)) users.set(key, value);
+      });
+      return res.json({ users: Array.from(users.values()).sort((left, right) => left.localeCompare(right, 'pt-BR')) });
+    } catch (error) {
+      return res.status(500).json({ message: 'erro-ao-consultar-usuarios' });
+    }
+  }
+
   function logAccess(req, res) {
     const payload = req.body && typeof req.body === 'object' ? req.body : {};
     const detailsSource = payload.details && typeof payload.details === 'object' ? payload.details : {};
@@ -60,6 +80,7 @@ function createLogsRouter(options) {
   router.post('/api/log-access', logAccess);
   router.get('/dashboard/api/logs', requireAuth, listLogs);
   router.get('/dashboard/api/logs/by-user-day', requireAuth, listLogs);
+  router.get('/dashboard/api/logs/users', requireAuth, listLogUsers);
 
   return router;
 }
