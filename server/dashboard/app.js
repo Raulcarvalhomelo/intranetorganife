@@ -401,7 +401,7 @@ function normalizeTimeInputValue(value) {
     }
   }
   const minutes = parseTimeToMinutes(value);
-  if (minutes === null) return hoursOnly;
+  if (minutes === null) return '';
   const hours = String(Math.floor(minutes / 60)).padStart(2, '0');
   const mins = String(minutes % 60).padStart(2, '0');
   return `${hours}:${mins}`;
@@ -816,7 +816,7 @@ async function boot() {
     if (!isViewerSession()) initConfigEvents();
     initNoticesEvents();
     setupLogsFilters();
-    await loadLogUsers();
+    loadLogUsers();
     setupRequestsFilters();
     if (!isViewerSession()) {
       document.getElementById('saveSettings').onclick = saveSettings;
