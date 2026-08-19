@@ -24,8 +24,10 @@ let currentSettings = {};
 const EXEMPT_BROWSER_USER = 'diretoria';
 const nativeFilePickerHostName = 'com.organife.filepicker';
 const LOGS_DB_NAME = 'organife-extension-db';
-const LOGS_DB_VERSION = 1;
+const LOGS_DB_VERSION = 2;
 const LOGS_STORE_NAME = 'activityLogs';
+const LOGS_PENDING_STORE_NAME = 'pendingLogs';
+const LOGS_PENDING_INDEX = 'by_queued_at';
 const KANBAN_REALTIME_DELTA_KEY = 'kanbanRealtimeDelta';
 const LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const LOG_CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
@@ -357,6 +359,10 @@ function openLogsDb() {
           store.createIndex('by_timestamp_ms', 'timestampMs', { unique: false });
           store.createIndex('by_action', 'action', { unique: false });
         }
+        if (!db.objectStoreNames.contains(LOGS_PENDING_STORE_NAME)) {
+          const pendingStore = db.createObjectStore(LOGS_PENDING_STORE_NAME, { keyPath: 'id' });
+          pendingStore.createIndex(LOGS_PENDING_INDEX, 'queuedAtMs', { unique: false });
+        }
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => resolve(null);
@@ -407,6 +413,37 @@ async function maybeCleanupActivityLogs(force = false) {
   });
 }
 
+async function maybeCleanupPendingLogs(force = false) {
+  const now = Date.now();
+  if (!force && now - lastPendingLogsCleanupAt < WS_LOG_PENDING_CLEANUP_INTERVAL_MS) return;
+  lastPendingLogsCleanupAt = now;
+  const db = await openLogsDb();
+  if (!db) return;
+  const cutoff = now - WS_LOG_QUEUE_MAX_AGE_MS;
+  await new Promise((resolve) => {
+    let transaction;
+    try {
+      transaction = db.transaction(LOGS_PENDING_STORE_NAME, 'readwrite');
+      const store = transaction.objectStore(LOGS_PENDING_STORE_NAME);
+      const index = store.index(LOGS_PENDING_INDEX);
+      const request = index.openCursor();
+      request.onsuccess = (event) => {
+        const cursor = event.target.result;
+        if (!cursor) return;
+        const value = cursor.value || {};
+        const queuedAtMs = Number(value.queuedAtMs) || 0;
+        if (queuedAtMs > 0 && queuedAtMs < cutoff) cursor.delete();
+        cursor.continue();
+      };
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => resolve();
+      transaction.onabort = () => resolve();
+    } catch (error) {
+      resolve();
+    }
+  });
+}
+
 async function appendActivityLog(log) {
   const db = await openLogsDb();
   if (!db) {
@@ -418,14 +455,17 @@ async function appendActivityLog(log) {
     return;
   }
   await new Promise((resolve) => {
-    const transaction = db.transaction(LOGS_STORE_NAME, 'readwrite');
+    const transaction = db.transaction([LOGS_STORE_NAME, LOGS_PENDING_STORE_NAME], 'readwrite');
     const store = transaction.objectStore(LOGS_STORE_NAME);
+    const pendingStore = transaction.objectStore(LOGS_PENDING_STORE_NAME);
     store.put(log);
+    pendingStore.put({ id: log.id, log, queuedAtMs: Date.now() });
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => resolve();
     transaction.onabort = () => resolve();
   });
   await maybeCleanupActivityLogs();
+  await maybeCleanupPendingLogs();
 }
 
 async function readActivityLogs({ action = 'all', sinceMs = 0, limit = 5000 } = {}) {
@@ -522,9 +562,11 @@ async function clearAllActivityLogs() {
     return;
   }
   await new Promise((resolve) => {
-    const transaction = db.transaction(LOGS_STORE_NAME, 'readwrite');
+    const transaction = db.transaction([LOGS_STORE_NAME, LOGS_PENDING_STORE_NAME], 'readwrite');
     const store = transaction.objectStore(LOGS_STORE_NAME);
+    const pendingStore = transaction.objectStore(LOGS_PENDING_STORE_NAME);
     store.clear();
+    pendingStore.clear();
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => resolve();
     transaction.onabort = () => resolve();
@@ -533,6 +575,7 @@ async function clearAllActivityLogs() {
 
 void clearLegacyActivityLogsFromStorage();
 void maybeCleanupActivityLogs(true);
+void maybeCleanupPendingLogs(true);
 
 let settingsWebSocket = null;
 let wsRetryTimer = null;
@@ -540,6 +583,11 @@ let wsRetryDelay = 1000;
 const WS_LOG_QUEUE_MAX_EVENTS = 2000;
 const WS_LOG_QUEUE_MAX_BYTES = 2 * 1024 * 1024;
 const WS_LOG_QUEUE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const WS_LOG_PENDING_LOAD_BATCH_SIZE = 50;
+const WS_LOG_PENDING_CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
+let lastPendingLogsCleanupAt = 0;
+let pendingLogsLoadPromise = null;
+let pendingLogsLoaded = false;
 let wsLogBatch = [];
 let wsLogBatchBytes = 0;
 let wsLogInFlight = [];
@@ -583,6 +631,7 @@ function removeOldestWsLog() {
   const removed = wsLogBatch.shift();
   wsLogBatchBytes = Math.max(0, wsLogBatchBytes - estimateWsLogBytes(removed));
   wsLogQueueDroppedCount += 1;
+  void deletePendingLogs([removed]);
   return true;
 }
 
@@ -599,6 +648,86 @@ function trimWsLogBatch() {
   while (wsLogBatchBytes + wsLogInFlightBytes > WS_LOG_QUEUE_MAX_BYTES) {
     if (!removeOldestWsLog()) break;
   }
+}
+
+function hasWsLogId(log) {
+  const id = log && log.id !== undefined && log.id !== null ? String(log.id) : '';
+  if (!id) return false;
+  return wsLogBatch.some((item) => String(item && item.id || '') === id)
+    || wsLogInFlight.some((item) => String(item && item.id || '') === id);
+}
+
+function queueWsLogInMemory(log) {
+  if (!log || hasWsLogId(log)) return false;
+  wsLogBatch.push(log);
+  wsLogBatchBytes += estimateWsLogBytes(log);
+  trimWsLogBatch();
+  return true;
+}
+
+async function loadPendingLogsIntoQueue() {
+  if (pendingLogsLoaded) return;
+  if (pendingLogsLoadPromise) return pendingLogsLoadPromise;
+  pendingLogsLoadPromise = (async () => {
+    const db = await openLogsDb();
+    if (!db) {
+      pendingLogsLoaded = true;
+      return;
+    }
+    const pending = [];
+    await new Promise((resolve) => {
+      let transaction;
+      try {
+        transaction = db.transaction(LOGS_PENDING_STORE_NAME, 'readonly');
+        const index = transaction.objectStore(LOGS_PENDING_STORE_NAME).index(LOGS_PENDING_INDEX);
+        const request = index.openCursor();
+        request.onsuccess = (event) => {
+          const cursor = event.target.result;
+          if (!cursor || pending.length >= WS_LOG_PENDING_LOAD_BATCH_SIZE) {
+            resolve();
+            return;
+          }
+          const value = cursor.value || {};
+          const log = value.log;
+          if (log) pending.push(log);
+          cursor.continue();
+        };
+        request.onerror = () => resolve();
+        transaction.onabort = () => resolve();
+        transaction.onerror = () => resolve();
+      } catch (error) {
+        resolve();
+      }
+    });
+    pending.forEach((log) => queueWsLogInMemory(log));
+    trimWsLogBatch();
+    pendingLogsLoaded = true;
+  })().catch(() => {
+    pendingLogsLoaded = true;
+  }).finally(() => {
+    pendingLogsLoadPromise = null;
+  });
+  return pendingLogsLoadPromise;
+}
+
+async function deletePendingLogs(logs) {
+  if (!Array.isArray(logs) || !logs.length) return true;
+  const db = await openLogsDb();
+  if (!db) return true;
+  return new Promise((resolve) => {
+    try {
+      const transaction = db.transaction(LOGS_PENDING_STORE_NAME, 'readwrite');
+      const store = transaction.objectStore(LOGS_PENDING_STORE_NAME);
+      logs.forEach((log) => {
+        if (log && log.id !== undefined && log.id !== null) store.delete(log.id);
+      });
+      transaction.oncomplete = () => resolve(true);
+      transaction.onerror = () => resolve(false);
+      transaction.onabort = () => resolve(false);
+    } catch (error) {
+      resolve(false);
+    }
+  });
 }
 
 function scheduleWsLogFlush() {
@@ -645,9 +774,7 @@ function flushWsLogBatch() {
 function queueWsLog(log) {
   if (!log) return;
   ensureWebSocketConnection();
-  wsLogBatch.push(log);
-  wsLogBatchBytes += estimateWsLogBytes(log);
-  trimWsLogBatch();
+  queueWsLogInMemory(log);
   if (wsLogBatch.length >= 50) flushWsLogBatch();
   else scheduleWsLogFlush();
 }
@@ -660,9 +787,10 @@ function setupWebSocket() {
   try {
     const wsUrl = `${String(serverUrl).replace(/^http/, 'ws').replace(/\/$/, '')}/ws`;
     settingsWebSocket = new WebSocket(wsUrl);
-    settingsWebSocket.onopen = () => {
+    settingsWebSocket.onopen = async () => {
       wsRetryDelay = 1000;
       settingsWebSocket.send(JSON.stringify({ type: 'hello', client: 'extension' }));
+      await loadPendingLogsIntoQueue();
       flushWsLogBatch();
     };
     settingsWebSocket.onmessage = async (event) => {
@@ -671,12 +799,17 @@ function setupWebSocket() {
       if (message.type === 'logs_ack') {
         const acknowledgedCount = Math.max(0, Math.min(wsLogInFlight.length, Number(message.count) || 0));
         if (acknowledgedCount > 0) {
-          const acknowledged = wsLogInFlight.splice(0, acknowledgedCount);
+          const acknowledged = wsLogInFlight.slice(0, acknowledgedCount);
+          const deleted = await deletePendingLogs(acknowledged);
+          if (!deleted) return;
+          wsLogInFlight.splice(0, acknowledgedCount);
           acknowledged.forEach((item) => {
             wsLogInFlightBytes = Math.max(0, wsLogInFlightBytes - estimateWsLogBytes(item));
           });
         }
         trimWsLogBatch();
+        pendingLogsLoaded = false;
+        await loadPendingLogsIntoQueue();
         if (wsLogBatch.length) flushWsLogBatch();
         return;
       }
