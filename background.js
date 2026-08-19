@@ -577,9 +577,7 @@ void clearLegacyActivityLogsFromStorage();
 void maybeCleanupActivityLogs(true);
 void maybeCleanupPendingLogs(true);
 
-let settingsWebSocket = null;
-let wsRetryTimer = null;
-let wsRetryDelay = 1000;
+let wsTransport = null;
 const WS_LOG_QUEUE_MAX_EVENTS = 2000;
 const WS_LOG_QUEUE_MAX_BYTES = 2 * 1024 * 1024;
 const WS_LOG_QUEUE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -596,8 +594,8 @@ let wsLogFlushTimer = null;
 let wsLogQueueDroppedCount = 0;
 
 function ensureWebSocketConnection() {
-  if (settingsWebSocket && (settingsWebSocket.readyState === 0 || settingsWebSocket.readyState === 1)) return;
-  if (!wsRetryTimer) setupWebSocket();
+  if (wsTransport && wsTransport.getState() < 2) return;
+  setupWebSocket();
 }
 
 function estimateWsLogBytes(log) {
@@ -744,7 +742,8 @@ function scheduleWsLogFlush() {
 function flushWsLogBatch() {
   trimWsLogBatch();
   if (!wsLogBatch.length) return false;
-  if (!settingsWebSocket || settingsWebSocket.readyState !== 1) {
+  const socket = wsTransport && wsTransport.getSocket();
+  if (!socket || socket.readyState !== 1) {
     ensureWebSocketConnection();
     scheduleWsLogFlush();
     return false;
@@ -756,7 +755,7 @@ function flushWsLogBatch() {
   wsLogInFlight = wsLogInFlight.concat(batch);
   wsLogInFlightBytes += batchBytes;
   try {
-    settingsWebSocket.send(JSON.stringify({ type: 'logs_batch', logs: batch }));
+    socket.send(JSON.stringify({ type: 'logs_batch', logs: batch }));
     if (wsLogBatch.length) flushWsLogBatch();
     return true;
   } catch (error) {
@@ -765,7 +764,7 @@ function flushWsLogBatch() {
     wsLogBatch = batch.concat(wsLogBatch);
     wsLogBatchBytes += batchBytes;
     trimWsLogBatch();
-    try { settingsWebSocket.close(); } catch (closeError) {}
+    try { socket.close(); } catch (closeError) {}
     scheduleWsLogFlush();
     return false;
   }
@@ -780,20 +779,16 @@ function queueWsLog(log) {
 }
 
 function setupWebSocket() {
-  if (wsRetryTimer) { clearTimeout(wsRetryTimer); wsRetryTimer = null; }
-  if (settingsWebSocket) { try { settingsWebSocket.close(); } catch (error) {} }
-  settingsWebSocket = null;
-  if (!serverUrl || typeof WebSocket !== 'function') return;
-  try {
-    const wsUrl = `${String(serverUrl).replace(/^http/, 'ws').replace(/\/$/, '')}/ws`;
-    settingsWebSocket = new WebSocket(wsUrl);
-    settingsWebSocket.onopen = async () => {
-      wsRetryDelay = 1000;
-      settingsWebSocket.send(JSON.stringify({ type: 'hello', client: 'extension' }));
+  if (!serverUrl || typeof OrganifeWebSocket === 'undefined' || typeof OrganifeWebSocket.createWebSocketTransport !== 'function') return;
+  const wsUrl = `${String(serverUrl).replace(/^http/, 'ws').replace(/\/$/, '')}/ws`;
+  if (wsTransport) wsTransport.close();
+  wsTransport = OrganifeWebSocket.createWebSocketTransport({
+    onOpen: async (socket) => {
+      socket.send(JSON.stringify({ type: 'hello', client: 'extension' }));
       await loadPendingLogsIntoQueue();
       flushWsLogBatch();
-    };
-    settingsWebSocket.onmessage = async (event) => {
+    },
+    onMessage: async (event) => {
       let message = {};
       try { message = JSON.parse(String(event.data || '{}')); } catch (error) { return; }
       if (message.type === 'logs_ack') {
@@ -824,10 +819,8 @@ function setupWebSocket() {
         return;
       }
       await loadSettingsFromServer();
-    };
-    settingsWebSocket.onerror = () => { try { settingsWebSocket.close(); } catch (error) {} };
-    settingsWebSocket.onclose = () => {
-      settingsWebSocket = null;
+    },
+    onClose: () => {
       if (wsLogInFlight.length) {
         wsLogBatch = wsLogInFlight.concat(wsLogBatch);
         wsLogBatchBytes += wsLogInFlightBytes;
@@ -836,13 +829,10 @@ function setupWebSocket() {
         trimWsLogBatch();
       }
       if (wsLogBatch.length) scheduleWsLogFlush();
-      wsRetryTimer = setTimeout(setupWebSocket, wsRetryDelay);
-      wsRetryDelay = Math.min(wsRetryDelay * 2, 30000);
-    };
-  } catch (error) {
-    wsRetryTimer = setTimeout(setupWebSocket, wsRetryDelay);
-    wsRetryDelay = Math.min(wsRetryDelay * 2, 30000);
-  }
+    },
+    onError: () => {}
+  });
+  wsTransport.setEndpoint(wsUrl);
 }
 browserAPI.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
