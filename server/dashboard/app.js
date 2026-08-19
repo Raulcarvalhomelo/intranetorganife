@@ -401,7 +401,7 @@ function normalizeTimeInputValue(value) {
     }
   }
   const minutes = parseTimeToMinutes(value);
-  if (minutes === null) return '';
+  if (minutes === null) return hoursOnly;
   const hours = String(Math.floor(minutes / 60)).padStart(2, '0');
   const mins = String(minutes % 60).padStart(2, '0');
   return `${hours}:${mins}`;
@@ -438,6 +438,17 @@ function formatLogDateTime(timestamp) {
     second: '2-digit',
     hour12: false
   }).format(date);
+}
+
+function setLogsFilterError(message) {
+  const element = document.getElementById('logsFilterError');
+  if (!element) return;
+  element.textContent = message || '';
+  element.hidden = !message;
+}
+
+function isValidOptionalTime(value) {
+  return !String(value || '').trim() || parseTimeToMinutes(value) !== null;
 }
 
 async function loadLogUsers() {
@@ -483,6 +494,11 @@ async function loadLogs(options) {
   const searchValue = String(search ? search.value : '').trim();
   const domainValue = String(domain ? domain.value : '').trim();
   const typeValue = String(type ? type.value : '').trim();
+  setLogsFilterError('');
+  if (!isValidOptionalTime(startTimeValue) || !isValidOptionalTime(endTimeValue)) {
+    setLogsFilterError('Informe horários válidos no formato HH:MM, entre 00:00 e 23:59.');
+    return;
+  }
   if (!userValue) {
     const body = document.getElementById('logsBody');
     if (body && !append) body.innerHTML = '<tr><td colspan="6" class="empty-cell">Selecione um usuário para carregar os logs.</td></tr>';
@@ -596,6 +612,10 @@ function setupLogsFilters() {
     };
     input.onblur = () => {
       input.value = normalizeTimeInputValue(input.value);
+      const invalid = !isValidOptionalTime(input.value);
+      input.setAttribute('aria-invalid', invalid ? 'true' : 'false');
+      if (invalid) setLogsFilterError('Informe horários válidos no formato HH:MM, entre 00:00 e 23:59.');
+      else setLogsFilterError('');
     };
     input.onkeydown = (event) => {
       if (event && event.key === 'Enter') {

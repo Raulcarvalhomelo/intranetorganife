@@ -4,6 +4,14 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 
+function normalizeFilterText(value) {
+  return String(value !== undefined && value !== null ? value : '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
 function createNdjsonWriter(logsDir) {
   const streams = new Map();
   const pendingWrites = new Map();
@@ -211,12 +219,12 @@ function createLogStore(options) {
         let parsed;
         try { parsed = JSON.parse(raw); } catch (error) { parsed = null; }
         if (!parsed || typeof parsed !== 'object') continue;
-        const user = String(parsed.browserUser || parsed.windowsUser || parsed.user || parsed.user_id || '').toLowerCase();
-        const action = String(parsed.action || parsed.type || '').toLowerCase();
+        const user = normalizeFilterText(parsed.browserUser || parsed.windowsUser || parsed.user || parsed.user_id || '');
+        const action = normalizeFilterText(parsed.action || parsed.type || '');
         const timestampMs = new Date(parsed.timestamp || 0).getTime();
-        const domain = extractLogDomain(parsed);
-        const payload = JSON.stringify(parsed).toLowerCase();
-        const query = String(filters.q || '').toLowerCase();
+        const domain = normalizeFilterText(extractLogDomain(parsed));
+        const payload = normalizeFilterText(JSON.stringify(parsed));
+        const query = normalizeFilterText(filters.q || '');
         if (filters.type && action !== filters.type) continue;
         if (filters.user && user.indexOf(filters.user) < 0) continue;
         if (Array.isArray(filters.users) && filters.users.length && !filters.users.some((entry) => user.indexOf(entry) >= 0)) continue;
@@ -245,17 +253,17 @@ function createLogStore(options) {
 
   function normalizeReadFilters(source) {
     const input = source || {};
-    const rawUsers = String(input.users || '').split(',').map((entry) => entry.trim().toLowerCase()).filter(Boolean);
+    const rawUsers = String(input.users || '').split(',').map((entry) => normalizeFilterText(entry)).filter(Boolean);
     const cursor = String(input.cursor || '').split('|');
     const cursorTimestamp = cursor.length === 2 ? Number(cursor[0]) : NaN;
     const maxLimit = Number(input.maxLimit) || 100;
     return {
       limit: Math.max(1, Math.min(maxLimit, Number(input.limit) || 50)),
-      q: String(input.q || '').trim().toLowerCase(),
-      type: String(input.type || '').trim().toLowerCase(),
-      user: String(input.user || '').trim().toLowerCase(),
+      q: normalizeFilterText(input.q || ''),
+      type: normalizeFilterText(input.type || ''),
+      user: normalizeFilterText(input.user || ''),
       users: rawUsers,
-      domain: String(input.domain || '').trim().toLowerCase(),
+      domain: normalizeFilterText(input.domain || ''),
       startMinutes: timeToMinutes(input.startTime),
       endMinutes: timeToMinutes(input.endTime),
       beforeTimestampMs: Number.isFinite(cursorTimestamp) ? cursorTimestamp : null,

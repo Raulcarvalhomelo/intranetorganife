@@ -66,6 +66,13 @@
   async function loadActivity() {
     const container = document.getElementById('activityPanel');
     if (!container || typeof api !== 'function') return;
+    const startTime = document.getElementById('logsStartTime');
+    const endTime = document.getElementById('logsEndTime');
+    if (typeof isValidOptionalTime === 'function'
+      && (!isValidOptionalTime(startTime ? startTime.value : '') || !isValidOptionalTime(endTime ? endTime.value : ''))) {
+      if (typeof setLogsFilterError === 'function') setLogsFilterError('Informe horários válidos no formato HH:MM, entre 00:00 e 23:59.');
+      return;
+    }
     const filters = activityFilters();
     if (!filters) {
       const timelineBody = document.getElementById('activityTimelineBody');
