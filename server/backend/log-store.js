@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
+const { classifyActivityType } = require('./activity-types');
 
 function normalizeFilterText(value) {
   return String(value !== undefined && value !== null ? value : '')
@@ -221,11 +222,12 @@ function createLogStore(options) {
         if (!parsed || typeof parsed !== 'object') continue;
         const user = normalizeFilterText(parsed.browserUser || parsed.windowsUser || parsed.user || parsed.user_id || '');
         const action = normalizeFilterText(parsed.action || parsed.type || '');
+        const activityType = classifyActivityType(parsed);
         const timestampMs = new Date(parsed.timestamp || 0).getTime();
         const domain = normalizeFilterText(extractLogDomain(parsed));
         const payload = normalizeFilterText(JSON.stringify(parsed));
         const query = normalizeFilterText(filters.q || '');
-        if (filters.type && action !== filters.type) continue;
+        if (filters.type && activityType.key !== filters.type) continue;
         if (filters.user && user.indexOf(filters.user) < 0) continue;
         if (Array.isArray(filters.users) && filters.users.length && !filters.users.some((entry) => user.indexOf(entry) >= 0)) continue;
         if (filters.domain && domain.indexOf(filters.domain) < 0) continue;
