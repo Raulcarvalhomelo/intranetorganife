@@ -154,3 +154,15 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: Con
   .logs-time-grid { grid-template-columns: 1fr; }
 }
 .logs-control-actions button:disabled { border-color: #dbe4ee; background: #e5edf5; color: #829ab1; cursor: not-allowed; filter: none; }
+.activity-collapse { overflow: hidden; }
+.activity-collapse > summary { list-style: none; cursor: pointer; }
+.activity-collapse > summary::-webkit-details-marker { display: none; }
+.activity-collapse > summary::before { content: '▸'; display: inline-block; margin-right: .45rem; color: #2f80ed; transition: transform .16s ease; }
+.activity-collapse[open] > summary::before { transform: rotate(90deg); }
+.activity-collapse > summary h4 { display: inline; }
+.activity-event-table { margin-top: .75rem; }
+.activity-event-table td:last-child { max-width: 28rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-collapse .activity-empty { padding: .75rem 0; }
+@media (max-width: 760px) {
+  .activity-event-table { display: block; overflow-x: auto; }
+}

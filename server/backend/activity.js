@@ -62,6 +62,7 @@ function normalizeEvent(log, index) {
     timestampMs,
     timestamp: new Date(timestampMs).toISOString(),
     url: String(details.url || item.url || ''),
+    title: String(details.title || item.title || ''),
     source: 'existing-log'
   };
 }
@@ -145,6 +146,22 @@ function buildActivity(logs) {
     events: events.length,
     documents,
     downloads,
+    documentItems: events.filter((event) => event.activityType === 'documents').slice(0, 200).map((event) => ({
+      id: event.eventId,
+      user: event.user,
+      browser: event.browser,
+      timestamp: event.timestamp,
+      title: event.title,
+      url: event.url
+    })),
+    downloadItems: events.filter((event) => event.activityType === 'download').slice(0, 200).map((event) => ({
+      id: event.eventId,
+      user: event.user,
+      browser: event.browser,
+      timestamp: event.timestamp,
+      title: event.title,
+      url: event.url
+    })),
     sessions: sessions.length,
     users: users.size,
     observedMs,

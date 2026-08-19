@@ -37,6 +37,18 @@
     if (!element) return;
     element.innerHTML = `<strong>${value}</strong><span>${caption}</span>`;
   }
+  function renderActivityList(id, summaryId, items, emptyText, label) {
+    const list = Array.isArray(items) ? items : [];
+    const summary = document.getElementById(summaryId);
+    if (summary) summary.textContent = `${list.length} ${list.length === 1 ? 'registro' : 'registros'}`;
+    const body = document.getElementById(id);
+    if (!body) return;
+    if (!list.length) {
+      body.innerHTML = `<div class="activity-empty">${esc(emptyText)}</div>`;
+      return;
+    }
+    body.innerHTML = `<table class="activity-table activity-event-table"><thead><tr><th>Data</th><th>Usuário</th><th>Navegador</th><th>${esc(label)}</th></tr></thead><tbody>${list.map((item) => `<tr><td>${esc(formatTime(item.timestamp))}</td><td>${esc(item.user || '-')}</td><td>${esc(item.browser || '-')}</td><td title="${esc(item.url || '')}">${esc(item.title || item.url || '-')}</td></tr>`).join('')}</tbody></table>`;
+  }
   function renderActivity(data) {
     const source = data && typeof data === 'object' ? data : {};
     renderMetric('activityObserved', formatDuration(source.observedMs), 'tempo observado');
@@ -45,6 +57,8 @@
     renderMetric('activityEvents', String(source.events || 0), 'eventos considerados');
     renderMetric('activityDocuments', String(source.documents || 0), 'documentos');
     renderMetric('activityDownloads', String(source.downloads || 0), 'downloads');
+    renderActivityList('activityDocumentsBody', 'activityDocumentsSummary', source.documentItems, 'Nenhum documento observado.', 'Documento');
+    renderActivityList('activityDownloadsBody', 'activityDownloadsSummary', source.downloadItems, 'Nenhum download observado.', 'Arquivo');
     const domains = Array.isArray(source.domains) ? source.domains : [];
     const domainBody = document.getElementById('activityDomainsBody');
     if (domainBody) {
@@ -89,6 +103,8 @@
       renderMetric('activityEvents', '--', 'eventos considerados');
       renderMetric('activityDocuments', '--', 'documentos');
       renderMetric('activityDownloads', '--', 'downloads');
+      renderActivityList('activityDocumentsBody', 'activityDocumentsSummary', [], 'Selecione um usuário para visualizar os documentos.', 'Documento');
+      renderActivityList('activityDownloadsBody', 'activityDownloadsSummary', [], 'Selecione um usuário para visualizar os downloads.', 'Arquivo');
       return;
     }
     container.classList.add('is-loading');

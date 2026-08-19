@@ -175,11 +175,13 @@
               <div id="activityDownloads" class="activity-metric"><strong>--</strong><span>downloads</span></div>
             </div>
             <div class="activity-grid">
-              <section class="activity-card"><div class="activity-card-title"><h4>Timeline</h4><span>intervalos observados</span></div><div id="activityTimelineBody" class="activity-timeline"><div class="activity-empty">Aguardando dados.</div></div></section>
+              <details class="activity-card activity-collapse" open><summary class="activity-card-title"><h4>Timeline de sessões</h4><span>intervalos observados</span></summary><div id="activityTimelineBody" class="activity-timeline"><div class="activity-empty">Aguardando dados.</div></div></details>
               <section class="activity-card"><div class="activity-card-title"><h4>Domínios</h4><span>tempo por domínio</span></div><div class="activity-table-wrap"><table class="activity-table"><thead><tr><th>Domínio</th><th>Tempo</th><th>Sessões</th><th>Eventos</th></tr></thead><tbody id="activityDomainsBody"></tbody></table></div></section>
+              <details class="activity-card activity-collapse"><summary class="activity-card-title"><h4>Documentos</h4><span id="activityDocumentsSummary">0 registros</span></summary><div id="activityDocumentsBody" class="activity-table-wrap"><div class="activity-empty">Nenhum documento observado.</div></div></details>
+              <details class="activity-card activity-collapse"><summary class="activity-card-title"><h4>Downloads</h4><span id="activityDownloadsSummary">0 registros</span></summary><div id="activityDownloadsBody" class="activity-table-wrap"><div class="activity-empty">Nenhum download observado.</div></div></details>
             </div>
           </div>
-          <details class="raw-logs-details" open><summary>Logs brutos para auditoria</summary>
+          <details class="raw-logs-details" open><summary>Logs brutos selecionados</summary>
             <table>
               <thead><tr><th>Data</th><th>Usuário</th><th>Navegador</th><th>Domínio</th><th>Tipo/Ação</th><th>Dados</th></tr></thead>
               <tbody id="logsBody"></tbody>
