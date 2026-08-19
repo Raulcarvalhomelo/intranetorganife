@@ -592,6 +592,15 @@ let wsLogInFlight = [];
 let wsLogInFlightBytes = 0;
 let wsLogFlushTimer = null;
 let wsLogQueueDroppedCount = 0;
+const wsLogMetrics = {
+  lastSendAt: 0,
+  lastAckAt: 0,
+  lastOfflineStartedAt: 0,
+  lastOfflineDurationMs: 0,
+  resendCount: 0,
+  maxBatchSize: 0,
+  maxBatchBytes: 0
+};
 
 function ensureWebSocketConnection() {
   if (wsTransport && wsTransport.getState() < 2) return;
@@ -661,6 +670,24 @@ function queueWsLogInMemory(log) {
   wsLogBatchBytes += estimateWsLogBytes(log);
   trimWsLogBatch();
   return true;
+}
+
+function getWsLogMetrics() {
+  const offlineStartedAt = wsLogMetrics.lastOfflineStartedAt;
+  return {
+    queueEvents: wsLogBatch.length + wsLogInFlight.length,
+    queueBytes: wsLogBatchBytes + wsLogInFlightBytes,
+    pendingEvents: wsLogBatch.length,
+    inFlightEvents: wsLogInFlight.length,
+    droppedEvents: wsLogQueueDroppedCount,
+    lastSendAt: wsLogMetrics.lastSendAt,
+    lastAckAt: wsLogMetrics.lastAckAt,
+    offlineStartedAt,
+    offlineDurationMs: offlineStartedAt ? Date.now() - offlineStartedAt : wsLogMetrics.lastOfflineDurationMs,
+    resendCount: wsLogMetrics.resendCount,
+    maxBatchSize: wsLogMetrics.maxBatchSize,
+    maxBatchBytes: wsLogMetrics.maxBatchBytes
+  };
 }
 
 async function loadPendingLogsIntoQueue() {
@@ -755,7 +782,11 @@ function flushWsLogBatch() {
   wsLogInFlight = wsLogInFlight.concat(batch);
   wsLogInFlightBytes += batchBytes;
   try {
-    socket.send(JSON.stringify({ type: 'logs_batch', logs: batch }));
+    const payload = JSON.stringify({ type: 'logs_batch', logs: batch });
+    socket.send(payload);
+    wsLogMetrics.lastSendAt = Date.now();
+    wsLogMetrics.maxBatchSize = Math.max(wsLogMetrics.maxBatchSize, batch.length);
+    wsLogMetrics.maxBatchBytes = Math.max(wsLogMetrics.maxBatchBytes, payload.length);
     if (wsLogBatch.length) flushWsLogBatch();
     return true;
   } catch (error) {
@@ -784,6 +815,10 @@ function setupWebSocket() {
   if (wsTransport) wsTransport.close();
   wsTransport = OrganifeWebSocket.createWebSocketTransport({
     onOpen: async (socket) => {
+      if (wsLogMetrics.lastOfflineStartedAt) {
+        wsLogMetrics.lastOfflineDurationMs = Math.max(0, Date.now() - wsLogMetrics.lastOfflineStartedAt);
+        wsLogMetrics.lastOfflineStartedAt = 0;
+      }
       socket.send(JSON.stringify({ type: 'hello', client: 'extension' }));
       await loadPendingLogsIntoQueue();
       flushWsLogBatch();
@@ -794,6 +829,7 @@ function setupWebSocket() {
       if (message.type === 'logs_ack') {
         const acknowledgedCount = Math.max(0, Math.min(wsLogInFlight.length, Number(message.count) || 0));
         if (acknowledgedCount > 0) {
+          wsLogMetrics.lastAckAt = Date.now();
           const acknowledged = wsLogInFlight.slice(0, acknowledgedCount);
           const deleted = await deletePendingLogs(acknowledged);
           if (!deleted) return;
@@ -821,7 +857,9 @@ function setupWebSocket() {
       await loadSettingsFromServer();
     },
     onClose: () => {
+      if (!wsLogMetrics.lastOfflineStartedAt) wsLogMetrics.lastOfflineStartedAt = Date.now();
       if (wsLogInFlight.length) {
+        wsLogMetrics.resendCount += wsLogInFlight.length;
         wsLogBatch = wsLogInFlight.concat(wsLogBatch);
         wsLogBatchBytes += wsLogInFlightBytes;
         wsLogInFlight = [];
@@ -1410,6 +1448,14 @@ browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
           }, 5000);
         });
         sendResponse({ success: true });
+      }
+      break;
+
+    case 'getLogTransportMetrics':
+      if (isRequestAuthorized(request, ['admin'])) {
+        sendResponse({ metrics: getWsLogMetrics() });
+      } else {
+        sendResponse({ metrics: null });
       }
       break;
 
